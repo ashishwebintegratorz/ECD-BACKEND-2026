@@ -1,0 +1,15 @@
+# node
+node_modules
+yarn.lock
+package-lock.json
+yarn-error.log
+dist
+razorpay-test.html
+API_DOCUMENTATION.md
+
+# os
+.DS_Store
+Thumbs.db
+
+# other
+.env
