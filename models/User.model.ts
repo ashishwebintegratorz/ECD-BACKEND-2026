@@ -13,6 +13,7 @@ export interface IUser extends Document {
   addresses?: Types.ObjectId[];
   isOnline: boolean;
   isReturning: boolean;
+  deliveryOtp?: string; // fixed OTP used to confirm delivery
   createdAt: Date;
   updatedAt: Date;
   meta?: Record<string, any>;
@@ -30,6 +31,7 @@ const UserSchema = new Schema<IUser>(
     addresses: [{ type: Schema.Types.ObjectId, ref: "Address" }],
     isOnline: { type: Boolean, default: false, index: true },
     isReturning: { type: Boolean, default: false, index: true },
+    deliveryOtp: { type: String },
     meta: { type: Schema.Types.Mixed },
   },
   { timestamps: true }
