@@ -26,16 +26,18 @@ export interface IOrderItem {
 }
 
 export interface IOrder extends Document {
-  orderNumber: string; // unique human readable ID
+  orderNumber: string;
   customer: Types.ObjectId;
+  restaurant: Types.ObjectId;   // which restaurant this order belongs to
   items: IOrderItem[];
   totalAmount: number;
+  deliveryCharge: number;       // delivery fee at time of order
   payableAmount: number;
-  address: Types.ObjectId | any; // denormalized address snapshot or ref
+  address: Types.ObjectId | any;
   status: OrderStatus;
   deliveryStatus: DeliveryStatus;
   assignedDriver?: Types.ObjectId;
-  assignmentId?: Types.ObjectId; // reference to Assignment
+  assignmentId?: Types.ObjectId;
   paymentTransaction?: Types.ObjectId;
   meta?: Record<string, any>;
   createdAt: Date;
@@ -58,8 +60,10 @@ const OrderSchema = new Schema<IOrder>(
   {
     orderNumber: { type: String, required: true, unique: true, index: true },
     customer: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    restaurant: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
     items: { type: [OrderItemSchema], required: true },
     totalAmount: { type: Number, required: true },
+    deliveryCharge: { type: Number, required: true, default: 0 },
     payableAmount: { type: Number, required: true },
     address: { type: Schema.Types.Mixed, required: true }, // store snapshot: {fullAddress, location, phone}
     status: { type: String, default: "pending", index: true },

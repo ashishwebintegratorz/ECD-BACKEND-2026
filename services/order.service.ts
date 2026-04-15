@@ -3,55 +3,72 @@ import Cart from "../models/Cart.model.js";
 import Product from "../models/Product.model.js";
 import Invoice from "../models/Invoice.model.js";
 import PaymentTransaction from "../models/PaymentTransaction.model.js";
+import Restaurant from "../models/Restaurant.model.js";
 
 /**
- * Logic to run when an order is confirmed (either via COD, Payment Verification or Webhook)
+ * Runs when an order is confirmed — via COD, payment verification, or webhook.
+ * 1. Marks order as confirmed
+ * 2. Decrements product stock
+ * 3. Increments restaurant orderCount
+ * 4. Clears customer cart
+ * 5. Generates invoice with full item snapshot
  */
 export const confirmOrderLogic = async (orderId: string) => {
-    console.log(`[confirmOrderLogic] Starting for orderId: ${orderId}`);
     const order = await Order.findById(orderId);
     if (!order) {
         console.error(`[confirmOrderLogic] Order not found: ${orderId}`);
         return;
     }
 
-    // 1. Mark status as confirmed if not already
+    // 1. Mark confirmed
     if (order.status !== "confirmed") {
         order.status = "confirmed";
         await order.save();
-        console.log(`[confirmOrderLogic] Order status updated to confirmed`);
     }
 
-    // 2. Subtract Stock
-    console.log(`[confirmOrderLogic] Updating stock for ${order.items.length} items`);
+    // 2. Decrement product stock
     for (const item of order.items) {
         if (item.variantIndex !== undefined) {
-            const updatePath = `variants.${item.variantIndex}.stock`;
             await Product.findByIdAndUpdate(item.product, {
-                $inc: { [updatePath]: -item.qty },
+                $inc: { [`variants.${item.variantIndex}.stock`]: -item.qty },
             });
         }
     }
 
-    // 3. Clear Cart
-    console.log(`[confirmOrderLogic] Clearing cart for user: ${order.customer}`);
+    // 3. Increment restaurant orderCount
+    if (order.restaurant) {
+        await Restaurant.findByIdAndUpdate(order.restaurant, {
+            $inc: { orderCount: 1 },
+        });
+    }
+
+    // 4. Clear cart
     await Cart.updateOne({ user: order.customer }, { items: [] });
 
-    // 4. Generate Invoice
+    // 5. Generate invoice (idempotent — skip if already exists)
     const invoiceExists = await Invoice.findOne({ order: orderId });
     if (!invoiceExists) {
-        console.log(`[confirmOrderLogic] Generating invoice`);
-        const transaction = await PaymentTransaction.findOne({ order: orderId, status: "success" });
+        const transaction = await PaymentTransaction.findOne({
+            order: orderId,
+            status: "success",
+        });
+
         await Invoice.create({
             invoiceNumber: `INV-${Date.now()}-${order.orderNumber}`,
             order: order._id,
             customer: order.customer,
+            restaurant: order.restaurant,
+            items: order.items.map((i) => ({
+                name: i.name ?? "Item",
+                qty: i.qty,
+                price: i.price,
+                subtotal: i.subtotal,
+            })),
+            totalAmount: order.totalAmount,
+            deliveryCharge: order.deliveryCharge ?? 0,
             amount: order.payableAmount,
-            paymentMethod: transaction ? transaction.provider : "unknown",
+            paymentMethod: transaction?.provider ?? "unknown",
             status: "paid",
         });
-        console.log(`[confirmOrderLogic] Invoice generated successfully`);
-    } else {
-        console.log(`[confirmOrderLogic] Invoice already exists`);
     }
 };

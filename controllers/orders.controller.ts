@@ -14,10 +14,13 @@ import { calculateDeliveryCharge, isWithinIndore } from "../utils/delivery.utils
 
 export const createOrder = async (req: Request, res: Response) => {
   const userId = req.user.id;
-  const { addressId, paymentMethod } = req.body;
+  const { addressId, paymentMethod, restaurantId } = req.body;
 
   if (!addressId)
     return res.status(400).json({ message: "Address is required" });
+
+  if (!restaurantId)
+    return res.status(400).json({ message: "Restaurant is required" });
 
   // 1️⃣ Fetch & validate address
   const addressDoc = await Address.findOne({
@@ -77,6 +80,7 @@ export const createOrder = async (req: Request, res: Response) => {
   const order = await Order.create({
     orderNumber: `ORD-${Date.now()}`,
     customer: userId,
+    restaurant: restaurantId,
     items: cart.items.map(i => ({
       product: i.product,
       name: i.name,
