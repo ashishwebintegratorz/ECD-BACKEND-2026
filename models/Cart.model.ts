@@ -36,6 +36,4 @@ const CartSchema = new Schema<ICart>(
   { timestamps: true }
 );
 
-CartSchema.index({ user: 1 });
-
 export default model<ICart>("Cart", CartSchema);

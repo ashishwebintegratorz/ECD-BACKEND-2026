@@ -5,7 +5,7 @@ package-lock.json
 yarn-error.log
 dist
 razorpay-test.html
-API_DOCUMENTATION.md
+ApiEndPointDetail.md
 
 # os
 .DS_Store

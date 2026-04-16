@@ -14,7 +14,7 @@ const OtpSchema = new Schema<IOtp>(
     phone: { type: String, required: true, index: true },
     codeHash: { type: String, required: true },
     attempts: { type: Number, default: 0 },
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: true },
     used: { type: Boolean, default: false },
   },
   { timestamps: true }

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { jwtAuth } from "../middlewares/jwtAuth.middleware.js";
-import { requireRole } from "../middlewares/role.middleware.js";
+import { updateProfile } from "../controllers/user.controller.js";
+import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 
 const router = Router();
 
@@ -17,5 +18,8 @@ router.get("/me", jwtAuth, (req, res) => {
         },
     });
 });
+
+// PUT /api/v1/user/update-profile
+router.put("/update-profile", jwtAuth, asyncHandler(updateProfile));
 
 export default router;

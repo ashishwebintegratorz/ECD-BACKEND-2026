@@ -14,14 +14,14 @@ export interface IRefreshToken extends Document {
 
 const RefreshTokenSchema = new Schema<IRefreshToken>(
   {
-    user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    user: { type: Schema.Types.ObjectId, ref: "User", required: true },
     deviceId: { type: String },
     tokenHash: { type: String, required: true },
     ip: { type: String },
     userAgent: { type: String },
     revoked: { type: Boolean, default: false },
     lastUsedAt: { type: Date },
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: true },
   },
   { timestamps: true }
 );
