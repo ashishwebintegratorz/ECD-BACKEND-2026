@@ -3,6 +3,7 @@ import { Schema, model, Document, Types } from "mongoose";
 export type OrderStatus =
   | "pending"
   | "confirmed"
+  | "restaurant_confirmed"  // restaurant accepted the order
   | "preparing"
   | "ready"
   | "cancelled"
@@ -10,6 +11,8 @@ export type OrderStatus =
 
 export type DeliveryStatus =
   | "pending"
+  | "driver_notified"       // driver has been notified, awaiting acceptance
+  | "accepted"              // driver accepted the order
   | "assigned"
   | "out_for_delivery"
   | "delivered"

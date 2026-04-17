@@ -4,7 +4,8 @@ import { jwtAuth } from "../middlewares/jwtAuth.middleware.js"; // user auth
 //import { authDriver } from "../middlewares/driverAuth.middleware.js"; // if you separate drivers
 import {
   createOrder, verifyPayment, getMyOrders, getOrderById, cancelOrder, updateOrderStatus, getAllOrders,
-  assignOrderToDriver, getDriverOrders, updateOrderByDriver
+  assignOrderToDriver, getDriverOrders, updateOrderByDriver,
+  restaurantConfirmOrder, restaurantMarkReady, driverAcceptOrder,
 } from "../controllers/orders.controller.js";
 import { requireRole } from "../middlewares/role.middleware.js";
 const router = Router();
@@ -79,6 +80,34 @@ router.put(
   jwtAuth,
   requireRole("driver"),
   asyncHandler(updateOrderByDriver)
+);
+
+// ─── Restaurant Flow ──────────────────────────────────────────────────────────
+
+// Restaurant: Confirm order (start preparing)
+router.patch(
+  "/restaurant/confirm/:orderId",
+  jwtAuth,
+  requireRole("admin"),
+  asyncHandler(restaurantConfirmOrder)
+);
+
+// Restaurant: Mark order ready for pickup
+router.patch(
+  "/restaurant/ready/:orderId",
+  jwtAuth,
+  requireRole("admin"),
+  asyncHandler(restaurantMarkReady)
+);
+
+// ─── Driver Acceptance ────────────────────────────────────────────────────────
+
+// Driver: Accept assigned order
+router.patch(
+  "/driver/accept/:orderId",
+  jwtAuth,
+  requireRole("driver"),
+  asyncHandler(driverAcceptOrder)
 );
 
 export default router;
