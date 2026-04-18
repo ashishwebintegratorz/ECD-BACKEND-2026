@@ -4,14 +4,19 @@ import Product from "../models/Product.model.js";
 import Invoice from "../models/Invoice.model.js";
 import PaymentTransaction from "../models/PaymentTransaction.model.js";
 import Restaurant from "../models/Restaurant.model.js";
+import { emitNewOrderToRestaurant } from "../socket/orderSocket.js";
 
 /**
- * Runs when an order is confirmed — via COD, payment verification, or webhook.
- * 1. Marks order as confirmed
+ * Runs when payment is confirmed (COD or Razorpay).
+ * No restaurant confirmation step — order goes straight to "preparing".
+ * Restaurant is notified via socket to start immediately.
+ *
+ * 1. Sets status to "preparing" (restaurant starts right away)
  * 2. Decrements product stock
  * 3. Increments restaurant orderCount
  * 4. Clears customer cart
- * 5. Generates invoice with full item snapshot
+ * 5. Generates invoice
+ * 6. Notifies restaurant via socket
  */
 export const confirmOrderLogic = async (orderId: string) => {
     const order = await Order.findById(orderId);
@@ -20,9 +25,9 @@ export const confirmOrderLogic = async (orderId: string) => {
         return;
     }
 
-    // 1. Mark confirmed
-    if (order.status !== "confirmed") {
-        order.status = "confirmed";
+    // 1. Set to preparing immediately — no confirmation step
+    if (order.status !== "preparing") {
+        order.status = "preparing";
         await order.save();
     }
 
@@ -45,7 +50,7 @@ export const confirmOrderLogic = async (orderId: string) => {
     // 4. Clear cart
     await Cart.updateOne({ user: order.customer }, { items: [] });
 
-    // 5. Generate invoice (idempotent — skip if already exists)
+    // 5. Generate invoice (idempotent)
     const invoiceExists = await Invoice.findOne({ order: orderId });
     if (!invoiceExists) {
         const transaction = await PaymentTransaction.findOne({
@@ -69,6 +74,18 @@ export const confirmOrderLogic = async (orderId: string) => {
             amount: order.payableAmount,
             paymentMethod: transaction?.provider ?? "unknown",
             status: "paid",
+        });
+    }
+
+    // 6. Notify restaurant — start preparing immediately
+    if (order.restaurant) {
+        emitNewOrderToRestaurant(order.restaurant.toString(), {
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            items: order.items,
+            totalAmount: order.totalAmount,
+            address: order.address,
+            message: "New order — start preparing now",
         });
     }
 };

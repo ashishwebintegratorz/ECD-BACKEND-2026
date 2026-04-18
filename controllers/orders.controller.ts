@@ -1,7 +1,6 @@
 import Order from "../models/Order.model.js";
 import Cart from "../models/Cart.model.js";
 import PaymentTransaction from "../models/PaymentTransaction.model.js";
-import Invoice from "../models/Invoice.model.js";
 import { razorpay } from "../config/razorpay.config.js";
 import crypto from "crypto";
 import { Request, Response } from "express";
@@ -16,20 +15,34 @@ import Address from "../models/Address.model.js";
 import { calculateDeliveryCharge, isWithinIndore } from "../utils/delivery.utils.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helper: log a cancellation entry onto the order itself
+// ─────────────────────────────────────────────────────────────────────────────
+const logCancellation = (
+  order: any,
+  cancelledBy: string,
+  cancelledByUser: string,
+  reason: string
+) => {
+  order.cancellationLog.push({
+    cancelledBy,
+    cancelledByUser,
+    reason,
+    cancelledAt: new Date(),
+  });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CUSTOMER: Create Order
 // ─────────────────────────────────────────────────────────────────────────────
 export const createOrder = async (req: Request, res: Response) => {
   const userId = req.user.id;
   const { addressId, paymentMethod, restaurantId } = req.body;
 
-  if (!addressId)
-    return res.status(400).json({ message: "Address is required" });
-  if (!restaurantId)
-    return res.status(400).json({ message: "Restaurant is required" });
+  if (!addressId) return res.status(400).json({ message: "Address is required" });
+  if (!restaurantId) return res.status(400).json({ message: "Restaurant is required" });
 
   const addressDoc = await Address.findOne({ _id: addressId, user: userId });
-  if (!addressDoc)
-    return res.status(404).json({ message: "Address not found" });
+  if (!addressDoc) return res.status(404).json({ message: "Address not found" });
 
   const { location } = addressDoc;
   if (!location?.coordinates || location.coordinates.length < 2)
@@ -52,7 +65,6 @@ export const createOrder = async (req: Request, res: Response) => {
   };
 
   const totalAmount = cart.items.reduce((s, i) => s + i.priceAtAdd * i.qty, 0);
-
   if (totalAmount < 100)
     return res.status(400).json({ message: "Minimum order amount is ₹100" });
 
@@ -79,7 +91,7 @@ export const createOrder = async (req: Request, res: Response) => {
     deliveryStatus: "pending",
   });
 
-  // COD flow
+  // COD flow — payment done, restaurant starts immediately
   if (paymentMethod === "cod") {
     await PaymentTransaction.create({
       order: order._id,
@@ -87,17 +99,8 @@ export const createOrder = async (req: Request, res: Response) => {
       amount: payableAmount,
       status: "success",
     });
-
     await confirmOrderLogic(order._id.toString());
     const updatedOrder = await Order.findById(order._id);
-
-    // Notify restaurant about new order
-    emitNewOrderToRestaurant(restaurantId, {
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      message: "New order received",
-    });
-
     return res.json({ order: updatedOrder, cod: true });
   }
 
@@ -140,9 +143,7 @@ export const verifyPayment = async (req: Request, res: Response) => {
   if (expectedSignature !== razorpay_signature)
     return res.status(400).json({ message: "Invalid payment signature" });
 
-  const transaction = await PaymentTransaction.findOne({
-    providerPaymentId: razorpay_order_id,
-  });
+  const transaction = await PaymentTransaction.findOne({ providerPaymentId: razorpay_order_id });
   if (!transaction)
     return res.status(404).json({ message: "Transaction not found" });
 
@@ -152,60 +153,20 @@ export const verifyPayment = async (req: Request, res: Response) => {
 
   await confirmOrderLogic(transaction.order.toString());
 
-  // Notify restaurant
-  const order = await Order.findById(transaction.order);
-  if (order?.restaurant) {
-    emitNewOrderToRestaurant(order.restaurant.toString(), {
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      message: "New order received",
-    });
-  }
-
   return res.json({ success: true });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESTAURANT: Confirm Order
-// Restaurant accepts the order → status moves to restaurant_confirmed
-// ─────────────────────────────────────────────────────────────────────────────
-export const restaurantConfirmOrder = async (req: Request, res: Response) => {
-  const { orderId } = req.params;
-
-  const order = await Order.findById(orderId);
-  if (!order)
-    return res.status(404).json({ message: "Order not found" });
-
-  if (order.status !== "confirmed")
-    return res.status(400).json({ message: "Order is not in confirmed state" });
-
-  order.status = "restaurant_confirmed";
-  order.status = "preparing"; // move to preparing immediately after restaurant confirms
-  await order.save();
-
-  emitOrderStatusUpdate(orderId, {
-    status: order.status,
-    deliveryStatus: order.deliveryStatus,
-    message: "Restaurant has confirmed your order and started preparing",
-    updatedAt: (order as any).updatedAt,
-  });
-
-  return res.json({ message: "Order confirmed by restaurant", order });
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RESTAURANT: Mark Order Ready
-// Restaurant marks order as ready for pickup
+// RESTAURANT: Mark Order Ready → admin assigns rider
 // ─────────────────────────────────────────────────────────────────────────────
 export const restaurantMarkReady = async (req: Request, res: Response) => {
-  const { orderId } = req.params;
+  const orderId = req.params.orderId as string;
 
   const order = await Order.findById(orderId);
-  if (!order)
-    return res.status(404).json({ message: "Order not found" });
+  if (!order) return res.status(404).json({ message: "Order not found" });
 
   if (order.status !== "preparing")
-    return res.status(400).json({ message: "Order is not in preparing state" });
+    return res.status(400).json({ message: "Order must be in preparing state" });
 
   order.status = "ready";
   await order.save();
@@ -213,32 +174,93 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
   emitOrderStatusUpdate(orderId, {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
-    message: "Your order is ready for pickup",
+    message: "Your order is ready. A rider will be assigned shortly.",
     updatedAt: (order as any).updatedAt,
   });
 
-  return res.json({ message: "Order marked as ready", order });
+  return res.json({ message: "Order marked as ready. Admin will assign a rider.", order });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ADMIN: Assign Driver — notifies driver via socket
+// RESTAURANT: Cancel Order (only while preparing, mandatory reason)
+// ─────────────────────────────────────────────────────────────────────────────
+export const restaurantCancelOrder = async (req: Request, res: Response) => {
+  const orderId = req.params.orderId as string;
+  const { reason } = req.body;
+
+  if (!reason || reason.trim().length < 5)
+    return res.status(400).json({ message: "Cancellation reason is required (min 5 characters)" });
+
+  const order = await Order.findById(orderId);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  if (order.status !== "preparing")
+    return res.status(400).json({ message: "Order can only be cancelled while preparing" });
+
+  order.status = "cancelled";
+  order.cancelledBy = "restaurant";
+  order.cancellationReason = reason.trim();
+  logCancellation(order, "restaurant", (req as any).user.id, reason.trim());
+  await order.save();
+
+  await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
+
+  emitOrderStatusUpdate(orderId, {
+    status: order.status,
+    deliveryStatus: order.deliveryStatus,
+    message: `Order cancelled by restaurant: ${reason.trim()}`,
+    updatedAt: (order as any).updatedAt,
+  });
+
+  return res.json({ success: true, message: "Order cancelled by restaurant", order });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMER: Cancel Order
+// ─────────────────────────────────────────────────────────────────────────────
+export const cancelOrder = async (req: Request, res: Response) => {
+  const userId = req.user.id;
+  const orderId = req.params.orderId as string;
+  const { reason } = req.body;
+
+  const order = await Order.findOne({ _id: orderId, customer: userId });
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  if (!["pending", "preparing"].includes(order.status))
+    return res.status(400).json({ message: "Order cannot be cancelled now" });
+
+  const cancelReason = reason?.trim() || "Cancelled by customer";
+  order.status = "cancelled";
+  order.cancelledBy = "customer";
+  order.cancellationReason = cancelReason;
+  logCancellation(order, "customer", userId, cancelReason);
+  await order.save();
+
+  await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
+
+  emitOrderStatusUpdate(orderId, {
+    status: order.status,
+    deliveryStatus: order.deliveryStatus,
+    message: "Order cancelled",
+    updatedAt: (order as any).updatedAt,
+  });
+
+  return res.json({ success: true, order });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: Assign Driver
 // ─────────────────────────────────────────────────────────────────────────────
 export const assignOrderToDriver = async (req: Request, res: Response) => {
-  const { orderId } = req.params;
+  const orderId = req.params.orderId as string;
   const { driverId } = req.body;
 
-  if (!driverId)
-    return res.status(400).json({ message: "Driver ID is required" });
+  if (!driverId) return res.status(400).json({ message: "Driver ID is required" });
 
   const driver = await User.findOne({ _id: driverId, role: "driver" });
-  if (!driver)
-    return res.status(404).json({ message: "Driver not found" });
-
-  if (!driver.isOnline)
-    return res.status(400).json({ message: "Driver is currently offline" });
-
-  if (driver.isReturning)
-    return res.status(400).json({ message: "Driver is currently returning to store" });
+  if (!driver) return res.status(404).json({ message: "Driver not found" });
+  if (!driver.isOnline) return res.status(400).json({ message: "Driver is currently offline" });
+  if (driver.isReturning) return res.status(400).json({ message: "Driver is currently returning to store" });
 
   const activeOrder = await Order.findOne({
     assignedDriver: driverId,
@@ -248,14 +270,12 @@ export const assignOrderToDriver = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Driver is already busy with another delivery" });
 
   const order = await Order.findById(orderId);
-  if (!order)
-    return res.status(404).json({ message: "Order not found" });
+  if (!order) return res.status(404).json({ message: "Order not found" });
 
   order.assignedDriver = driverId as any;
-  order.deliveryStatus = "driver_notified"; // driver notified, awaiting acceptance
+  order.deliveryStatus = "driver_notified";
   await order.save();
 
-  // Notify driver via socket
   emitOrderAssignedToDriver(driverId, {
     orderId: order._id,
     orderNumber: order.orderNumber,
@@ -268,15 +288,13 @@ export const assignOrderToDriver = async (req: Request, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DRIVER: Accept Order
-// Driver accepts the assigned order
 // ─────────────────────────────────────────────────────────────────────────────
 export const driverAcceptOrder = async (req: Request, res: Response) => {
   const driverId = req.user.id;
-  const { orderId } = req.params;
+  const orderId = req.params.orderId as string;
 
   const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
-  if (!order)
-    return res.status(404).json({ message: "Order not found or not assigned to you" });
+  if (!order) return res.status(404).json({ message: "Order not found or not assigned to you" });
 
   if (order.deliveryStatus !== "driver_notified")
     return res.status(400).json({ message: "Order is not awaiting driver acceptance" });
@@ -295,14 +313,41 @@ export const driverAcceptOrder = async (req: Request, res: Response) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DRIVER: Update Delivery Status
-// out_for_delivery → delivered (with OTP) | failed
+// DRIVER: Decline Order — logged in cancellationLog, admin re-assigns
+// ─────────────────────────────────────────────────────────────────────────────
+export const driverDeclineOrder = async (req: Request, res: Response) => {
+  const driverId = req.user.id;
+  const orderId = req.params.orderId as string;
+  const { reason } = req.body;
+
+  const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
+  if (!order) return res.status(404).json({ message: "Order not found or not assigned to you" });
+
+  if (order.deliveryStatus !== "driver_notified")
+    return res.status(400).json({ message: "Order is not awaiting driver acceptance" });
+
+  const declineReason = reason?.trim() || "Driver declined the delivery";
+  order.assignedDriver = undefined;
+  order.deliveryStatus = "pending";
+  logCancellation(order, "driver", driverId, declineReason);
+  await order.save();
+
+  emitOrderStatusUpdate(orderId, {
+    status: order.status,
+    deliveryStatus: order.deliveryStatus,
+    message: "Driver declined. Please re-assign a driver.",
+    updatedAt: (order as any).updatedAt,
+  });
+
+  return res.json({ message: "Order declined. Admin will re-assign a driver.", order });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DRIVER: Update Delivery Status (out_for_delivery / delivered with OTP / failed)
 // ─────────────────────────────────────────────────────────────────────────────
 export const updateOrderByDriver = async (req: Request, res: Response) => {
   const driverId = req.user.id;
-  const orderId = Array.isArray(req.params.orderId)
-    ? req.params.orderId[0]
-    : req.params.orderId;
+  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
   const { status, otp } = req.body;
 
   const allowedStatuses = ["out_for_delivery", "delivered", "failed"];
@@ -310,39 +355,29 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Invalid status for driver" });
 
   const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
-  if (!order)
-    return res.status(404).json({ message: "Order not found or not assigned to you" });
+  if (!order) return res.status(404).json({ message: "Order not found or not assigned to you" });
 
-  // OTP verification on delivery
+  // OTP check on delivery
   if (status === "delivered") {
     const customer = await User.findById(order.customer);
-    if (!customer)
-      return res.status(404).json({ message: "Customer not found" });
-
-    if (!customer.deliveryOtp)
-      return res.status(400).json({ message: "Customer has no delivery OTP set" });
-
-    if (!otp)
-      return res.status(400).json({ message: "OTP is required to confirm delivery" });
-
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    if (!customer.deliveryOtp) return res.status(400).json({ message: "Customer has no delivery OTP set" });
+    if (!otp) return res.status(400).json({ message: "OTP is required to confirm delivery" });
     if (String(otp) !== String(customer.deliveryOtp))
       return res.status(400).json({ message: "Invalid delivery OTP" });
   }
 
   order.deliveryStatus = status as any;
-  if (status === "delivered") order.status = "ready"; // final state
+  if (status === "delivered") order.status = "ready";
   await order.save();
 
-  // If delivered, check if driver has more active orders
   if (status === "delivered") {
     const remaining = await Order.findOne({
       assignedDriver: driverId,
       deliveryStatus: { $in: ["accepted", "assigned", "out_for_delivery"] },
       _id: { $ne: orderId },
     });
-    if (!remaining) {
-      await User.findByIdAndUpdate(driverId, { isReturning: true });
-    }
+    if (!remaining) await User.findByIdAndUpdate(driverId, { isReturning: true });
   }
 
   emitOrderStatusUpdate(orderId, {
@@ -358,8 +393,7 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
 // CUSTOMER: Get My Orders
 // ─────────────────────────────────────────────────────────────────────────────
 export const getMyOrders = async (req: Request, res: Response) => {
-  const userId = req.user.id;
-  const orders = await Order.find({ customer: userId })
+  const orders = await Order.find({ customer: req.user.id })
     .sort({ createdAt: -1 })
     .populate("paymentTransaction");
   return res.json(orders);
@@ -376,8 +410,7 @@ export const getOrderById = async (req: Request, res: Response) => {
     .populate("customer", "name phone")
     .populate("paymentTransaction");
 
-  if (!order)
-    return res.status(404).json({ message: "Order not found" });
+  if (!order) return res.status(404).json({ message: "Order not found" });
 
   const isAdmin = user.role === "admin";
   const isOwner = order.customer._id.toString() === user.id;
@@ -390,48 +423,18 @@ export const getOrderById = async (req: Request, res: Response) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CUSTOMER: Cancel Order
-// ─────────────────────────────────────────────────────────────────────────────
-export const cancelOrder = async (req: Request, res: Response) => {
-  const userId = req.user.id;
-  const { orderId } = req.params;
-
-  const order = await Order.findOne({ _id: orderId, customer: userId });
-  if (!order)
-    return res.status(404).json({ message: "Order not found" });
-
-  if (!["pending", "confirmed"].includes(order.status))
-    return res.status(400).json({ message: "Order cannot be cancelled now" });
-
-  order.status = "cancelled";
-  await order.save();
-
-  await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
-
-  emitOrderStatusUpdate(orderId, {
-    status: order.status,
-    deliveryStatus: order.deliveryStatus,
-    message: "Order cancelled",
-    updatedAt: (order as any).updatedAt,
-  });
-
-  return res.json({ success: true, order });
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
 // ADMIN: Update Order Status
 // ─────────────────────────────────────────────────────────────────────────────
 export const updateOrderStatus = async (req: Request, res: Response) => {
-  const { orderId } = req.params;
+  const orderId = req.params.orderId as string;
   const { status } = req.body;
 
-  const allowedStatus = ["confirmed", "preparing", "ready", "cancelled", "failed"];
+  const allowedStatus = ["preparing", "ready", "cancelled", "failed"];
   if (!allowedStatus.includes(status))
     return res.status(400).json({ message: "Invalid status" });
 
   const order = await Order.findByIdAndUpdate(orderId, { status }, { new: true });
-  if (!order)
-    return res.status(404).json({ message: "Order not found" });
+  if (!order) return res.status(404).json({ message: "Order not found" });
 
   emitOrderStatusUpdate(orderId, {
     status: order.status,
@@ -480,4 +483,74 @@ export const getDriverOrders = async (req: Request, res: Response) => {
     .populate("customer", "name phone");
 
   return res.json(orders);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: Get All Cancellations (from cancellationLog embedded in orders)
+// Filter: ?cancelledBy=restaurant|customer|driver&restaurantId=&from=&to=
+// ─────────────────────────────────────────────────────────────────────────────
+export const getAllCancellations = async (req: Request, res: Response) => {
+  const { cancelledBy, restaurantId, from, to } = req.query;
+  const query: any = { status: "cancelled" };
+
+  if (cancelledBy) query.cancelledBy = cancelledBy;
+  if (restaurantId) query.restaurant = restaurantId;
+  if (from || to) {
+    query.updatedAt = {};
+    if (from) query.updatedAt.$gte = new Date(from as string);
+    if (to) query.updatedAt.$lte = new Date(to as string);
+  }
+
+  const orders = await Order.find(query)
+    .sort({ updatedAt: -1 })
+    .select("orderNumber status cancelledBy cancellationReason cancellationLog restaurant customer totalAmount payableAmount updatedAt")
+    .populate("customer", "name phone")
+    .populate("restaurant", "name slug");
+
+  return res.json({ total: orders.length, orders });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: Get Cancellations by Restaurant
+// ─────────────────────────────────────────────────────────────────────────────
+export const getRestaurantCancellations = async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const { from, to } = req.query;
+
+  const query: any = { restaurant: restaurantId, cancelledBy: "restaurant" };
+  if (from || to) {
+    query.updatedAt = {};
+    if (from) query.updatedAt.$gte = new Date(from as string);
+    if (to) query.updatedAt.$lte = new Date(to as string);
+  }
+
+  const orders = await Order.find(query)
+    .sort({ updatedAt: -1 })
+    .select("orderNumber status cancellationReason cancellationLog totalAmount payableAmount updatedAt")
+    .populate("customer", "name phone");
+
+  return res.json({ total: orders.length, orders });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: Cancellation Stats
+// ─────────────────────────────────────────────────────────────────────────────
+export const getCancellationStats = async (req: Request, res: Response) => {
+  const { from, to } = req.query;
+
+  const matchStage: any = { status: "cancelled" };
+  if (from || to) {
+    matchStage.updatedAt = {};
+    if (from) matchStage.updatedAt.$gte = new Date(from as string);
+    if (to) matchStage.updatedAt.$lte = new Date(to as string);
+  }
+
+  const breakdown = await Order.aggregate([
+    { $match: matchStage },
+    { $group: { _id: "$cancelledBy", count: { $sum: 1 } } },
+  ]);
+
+  const total = await Order.countDocuments({ status: "cancelled" });
+
+  return res.json({ total, breakdown });
 };

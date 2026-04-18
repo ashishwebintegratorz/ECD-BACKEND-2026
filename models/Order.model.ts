@@ -2,39 +2,47 @@ import { Schema, model, Document, Types } from "mongoose";
 
 export type OrderStatus =
   | "pending"
-  | "confirmed"
-  | "restaurant_confirmed"  // restaurant accepted the order
-  | "preparing"
-  | "ready"
+  | "preparing"   // auto-set when payment confirmed — restaurant starts immediately
+  | "ready"       // restaurant marks done, rider notified
   | "cancelled"
   | "failed";
 
 export type DeliveryStatus =
   | "pending"
-  | "driver_notified"       // driver has been notified, awaiting acceptance
-  | "accepted"              // driver accepted the order
+  | "driver_notified"   // driver notified, awaiting acceptance
+  | "accepted"          // driver accepted
   | "assigned"
   | "out_for_delivery"
   | "delivered"
   | "cancelled"
   | "failed";
 
+export type CancelledBy = "customer" | "restaurant" | "driver" | "admin";
+
+// ── Embedded cancellation log entry ─────────────────────────────────────────
+export interface ICancellationLog {
+  cancelledBy: CancelledBy;
+  cancelledByUser: Types.ObjectId;
+  reason: string;
+  cancelledAt: Date;
+}
+
 export interface IOrderItem {
   product: Types.ObjectId;
   name?: string;
   variantIndex?: number;
   qty: number;
-  price: number; // final price per unit at time of order
+  price: number;
   subtotal: number;
 }
 
 export interface IOrder extends Document {
   orderNumber: string;
   customer: Types.ObjectId;
-  restaurant: Types.ObjectId;   // which restaurant this order belongs to
+  restaurant: Types.ObjectId;
   items: IOrderItem[];
   totalAmount: number;
-  deliveryCharge: number;       // delivery fee at time of order
+  deliveryCharge: number;
   payableAmount: number;
   address: Types.ObjectId | any;
   status: OrderStatus;
@@ -42,6 +50,10 @@ export interface IOrder extends Document {
   assignedDriver?: Types.ObjectId;
   assignmentId?: Types.ObjectId;
   paymentTransaction?: Types.ObjectId;
+  // Cancellation — stored directly on the order, no separate collection needed
+  cancellationReason?: string;
+  cancelledBy?: CancelledBy;
+  cancellationLog: ICancellationLog[]; // full history (driver declines, etc.)
   meta?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
@@ -59,6 +71,16 @@ const OrderItemSchema = new Schema<IOrderItem>(
   { _id: false }
 );
 
+const CancellationLogSchema = new Schema<ICancellationLog>(
+  {
+    cancelledBy: { type: String, enum: ["customer", "restaurant", "driver", "admin"], required: true },
+    cancelledByUser: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    reason: { type: String, required: true },
+    cancelledAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const OrderSchema = new Schema<IOrder>(
   {
     orderNumber: { type: String, required: true, unique: true, index: true },
@@ -68,12 +90,15 @@ const OrderSchema = new Schema<IOrder>(
     totalAmount: { type: Number, required: true },
     deliveryCharge: { type: Number, required: true, default: 0 },
     payableAmount: { type: Number, required: true },
-    address: { type: Schema.Types.Mixed, required: true }, // store snapshot: {fullAddress, location, phone}
+    address: { type: Schema.Types.Mixed, required: true },
     status: { type: String, default: "pending", index: true },
     deliveryStatus: { type: String, default: "pending", index: true },
     assignedDriver: { type: Schema.Types.ObjectId, ref: "User" },
     assignmentId: { type: Schema.Types.ObjectId, ref: "Assignment" },
     paymentTransaction: { type: Schema.Types.ObjectId, ref: "PaymentTransaction" },
+    cancellationReason: { type: String },
+    cancelledBy: { type: String, enum: ["customer", "restaurant", "driver", "admin"] },
+    cancellationLog: { type: [CancellationLogSchema], default: [] },
     meta: { type: Schema.Types.Mixed },
   },
   { timestamps: true }
@@ -82,5 +107,6 @@ const OrderSchema = new Schema<IOrder>(
 OrderSchema.index({ customer: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, assignedDriver: 1 });
 OrderSchema.index({ deliveryStatus: 1, assignedDriver: 1 });
+OrderSchema.index({ cancelledBy: 1, createdAt: -1 }); // admin cancellation queries
 
 export default model<IOrder>("Order", OrderSchema);
