@@ -56,7 +56,7 @@ export const addToWishlist = async (req: Request, res: Response) => {
 export const removeFromWishlist = async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
-    const { productId } = req.params;
+    const productId = req.params.productId as string;
 
     if (!mongoose.Types.ObjectId.isValid(productId)) {
       return res.status(400).json({
