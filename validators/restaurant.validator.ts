@@ -13,6 +13,7 @@ export const createRestaurantSchema = z.object({
     body: z.object({
         name: z.string().min(2, "Name must be at least 2 characters"),
         slug: z.string().min(2).optional(),
+        storeType: z.enum(["restaurant", "grocery"]).default("restaurant"),
         description: z.string().optional(),
         address: z.string().min(5, "Address must be at least 5 characters"),
         lat: z.coerce.number().min(-90, "lat must be >= -90").max(90, "lat must be <= 90"),
@@ -40,6 +41,7 @@ export const updateRestaurantSchema = z.object({
         coverImage: optionalUrl,
         isActive: z.boolean().optional(),
         featured: z.boolean().optional(),
+        storeType: z.enum(["restaurant", "grocery"]).optional(),
     }),
 });
 

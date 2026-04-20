@@ -11,8 +11,8 @@ export interface IInvoice extends Document {
     invoiceNumber: string;
     order: Types.ObjectId;
     customer: Types.ObjectId;
-    restaurant: Types.ObjectId;
-    items: IInvoiceItem[];        // snapshot of order items at time of invoice
+    store: Types.ObjectId;         // generic — restaurant or grocery store
+    items: IInvoiceItem[];
     totalAmount: number;          // items total before delivery
     deliveryCharge: number;       // delivery fee
     amount: number;               // final payable (totalAmount + deliveryCharge)
@@ -38,7 +38,7 @@ const InvoiceSchema = new Schema<IInvoice>(
         invoiceNumber: { type: String, required: true, unique: true, index: true },
         order: { type: Schema.Types.ObjectId, ref: "Order", required: true, index: true },
         customer: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-        restaurant: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
+        store: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
         items: { type: [InvoiceItemSchema], default: [] },
         totalAmount: { type: Number, required: true },
         deliveryCharge: { type: Number, required: true, default: 0 },

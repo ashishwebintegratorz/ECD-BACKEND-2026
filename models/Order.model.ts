@@ -39,7 +39,7 @@ export interface IOrderItem {
 export interface IOrder extends Document {
   orderNumber: string;
   customer: Types.ObjectId;
-  restaurant: Types.ObjectId;
+  store: Types.ObjectId;         // generic ref — works for both restaurant and grocery
   items: IOrderItem[];
   totalAmount: number;
   deliveryCharge: number;
@@ -50,10 +50,9 @@ export interface IOrder extends Document {
   assignedDriver?: Types.ObjectId;
   assignmentId?: Types.ObjectId;
   paymentTransaction?: Types.ObjectId;
-  // Cancellation — stored directly on the order, no separate collection needed
   cancellationReason?: string;
   cancelledBy?: CancelledBy;
-  cancellationLog: ICancellationLog[]; // full history (driver declines, etc.)
+  cancellationLog: ICancellationLog[];
   meta?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
@@ -85,7 +84,7 @@ const OrderSchema = new Schema<IOrder>(
   {
     orderNumber: { type: String, required: true, unique: true, index: true },
     customer: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    restaurant: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
+    store: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
     items: { type: [OrderItemSchema], required: true },
     totalAmount: { type: Number, required: true },
     deliveryCharge: { type: Number, required: true, default: 0 },

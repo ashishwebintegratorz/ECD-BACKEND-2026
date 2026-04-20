@@ -4,7 +4,7 @@ import PaymentTransaction from "../models/PaymentTransaction.model.js";
 import { razorpay } from "../config/razorpay.config.js";
 import crypto from "crypto";
 import { Request, Response } from "express";
-import { confirmOrderLogic } from "../services/order.service.js";
+import { confirmOrderLogic, updateDriverLedgerRef, validateCartStock } from "../services/order.service.js";
 import User from "../models/User.model.js";
 import {
   emitOrderStatusUpdate,
@@ -39,7 +39,7 @@ export const createOrder = async (req: Request, res: Response) => {
   const { addressId, paymentMethod, restaurantId } = req.body;
 
   if (!addressId) return res.status(400).json({ message: "Address is required" });
-  if (!restaurantId) return res.status(400).json({ message: "Restaurant is required" });
+  if (!restaurantId) return res.status(400).json({ message: "Store is required" });
 
   const addressDoc = await Address.findOne({ _id: addressId, user: userId });
   if (!addressDoc) return res.status(404).json({ message: "Address not found" });
@@ -55,6 +55,11 @@ export const createOrder = async (req: Request, res: Response) => {
   const cart = await Cart.findOne({ user: userId });
   if (!cart || cart.items.length === 0)
     return res.status(400).json({ message: "Cart empty" });
+
+  // ── Stock validation (works for both restaurant and grocery) ──────────────
+  const stockCheck = await validateCartStock(cart.items);
+  if (!stockCheck.ok)
+    return res.status(400).json({ message: stockCheck.message });
 
   const addressSnapshot = {
     fullAddress: addressDoc.fullAddress,
@@ -74,7 +79,7 @@ export const createOrder = async (req: Request, res: Response) => {
   const order = await Order.create({
     orderNumber: `ORD-${Date.now()}`,
     customer: userId,
-    restaurant: restaurantId,
+    store: restaurantId,   // generic store ref (restaurant or grocery)
     items: cart.items.map((i) => ({
       product: i.product,
       name: i.name,
@@ -91,7 +96,7 @@ export const createOrder = async (req: Request, res: Response) => {
     deliveryStatus: "pending",
   });
 
-  // COD flow — payment done, restaurant starts immediately
+  // COD flow
   if (paymentMethod === "cod") {
     await PaymentTransaction.create({
       order: order._id,
@@ -371,6 +376,11 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
   if (status === "delivered") order.status = "ready";
   await order.save();
 
+  // Update driver ledger ref now that we know who delivered
+  if (status === "delivered") {
+    await updateDriverLedgerRef(orderId, driverId);
+  }
+
   if (status === "delivered") {
     const remaining = await Order.findOne({
       assignedDriver: driverId,
@@ -494,7 +504,7 @@ export const getAllCancellations = async (req: Request, res: Response) => {
   const query: any = { status: "cancelled" };
 
   if (cancelledBy) query.cancelledBy = cancelledBy;
-  if (restaurantId) query.restaurant = restaurantId;
+  if (restaurantId) query.store = restaurantId;
   if (from || to) {
     query.updatedAt = {};
     if (from) query.updatedAt.$gte = new Date(from as string);
@@ -503,9 +513,9 @@ export const getAllCancellations = async (req: Request, res: Response) => {
 
   const orders = await Order.find(query)
     .sort({ updatedAt: -1 })
-    .select("orderNumber status cancelledBy cancellationReason cancellationLog restaurant customer totalAmount payableAmount updatedAt")
+    .select("orderNumber status cancelledBy cancellationReason cancellationLog store customer totalAmount payableAmount updatedAt")
     .populate("customer", "name phone")
-    .populate("restaurant", "name slug");
+    .populate("store", "name slug storeType");
 
   return res.json({ total: orders.length, orders });
 };
@@ -517,7 +527,7 @@ export const getRestaurantCancellations = async (req: Request, res: Response) =>
   const { restaurantId } = req.params;
   const { from, to } = req.query;
 
-  const query: any = { restaurant: restaurantId, cancelledBy: "restaurant" };
+  const query: any = { store: restaurantId, cancelledBy: "restaurant" };
   if (from || to) {
     query.updatedAt = {};
     if (from) query.updatedAt.$gte = new Date(from as string);

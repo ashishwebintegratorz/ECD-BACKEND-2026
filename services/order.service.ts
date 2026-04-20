@@ -2,22 +2,62 @@ import Order from "../models/Order.model.js";
 import Cart from "../models/Cart.model.js";
 import Product from "../models/Product.model.js";
 import Invoice from "../models/Invoice.model.js";
+import Ledger from "../models/Ledger.model.js";
 import PaymentTransaction from "../models/PaymentTransaction.model.js";
 import Restaurant from "../models/Restaurant.model.js";
 import { emitNewOrderToRestaurant } from "../socket/orderSocket.js";
 
-/**
- * Runs when payment is confirmed (COD or Razorpay).
- * No restaurant confirmation step — order goes straight to "preparing".
- * Restaurant is notified via socket to start immediately.
- *
- * 1. Sets status to "preparing" (restaurant starts right away)
- * 2. Decrements product stock
- * 3. Increments restaurant orderCount
- * 4. Clears customer cart
- * 5. Generates invoice
- * 6. Notifies restaurant via socket
- */
+const PLATFORM_FEE_PERCENT = 0.10;
+const PLATFORM_REF_ID = process.env.PLATFORM_REF_ID ?? "000000000000000000000001";
+
+const calculateSplit = (totalAmount: number, deliveryCharge: number) => {
+    const platformFee = Math.round(totalAmount * PLATFORM_FEE_PERCENT);
+    const storeNet = totalAmount - platformFee;
+    const driverNet = deliveryCharge;
+    return { storeNet, driverNet, platformFee };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STOCK VALIDATION
+// Called before order creation — ensures all cart items have sufficient stock.
+// Works for both restaurant (menu items) and grocery (product variants).
+// ─────────────────────────────────────────────────────────────────────────────
+export const validateCartStock = async (
+    items: { product: any; variantIndex?: number; qty: number; name?: string }[]
+): Promise<{ ok: boolean; message?: string }> => {
+    for (const item of items) {
+        const product = await Product.findById(item.product);
+        if (!product || !product.isActive) {
+            return { ok: false, message: `Product "${item.name ?? item.product}" is no longer available` };
+        }
+
+        const variantIdx = item.variantIndex ?? 0;
+        const variant = product.variants[variantIdx];
+
+        if (!variant) {
+            return { ok: false, message: `Variant not found for "${product.name}"` };
+        }
+
+        if (variant.stock < item.qty) {
+            return {
+                ok: false,
+                message: `Insufficient stock for "${product.name}" (${variant.unit ?? "unit"}). Available: ${variant.stock}, Requested: ${item.qty}`,
+            };
+        }
+
+        // Expiry check for grocery perishables
+        if (variant.expiryDate && variant.expiryDate < new Date()) {
+            return { ok: false, message: `"${product.name}" has expired and cannot be ordered` };
+        }
+    }
+    return { ok: true };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIRM ORDER LOGIC
+// Triggered on payment success (COD or Razorpay).
+// Works for both restaurant and grocery orders.
+// ─────────────────────────────────────────────────────────────────────────────
 export const confirmOrderLogic = async (orderId: string) => {
     const order = await Order.findById(orderId);
     if (!order) {
@@ -25,7 +65,7 @@ export const confirmOrderLogic = async (orderId: string) => {
         return;
     }
 
-    // 1. Set to preparing immediately — no confirmation step
+    // 1. Set to preparing immediately
     if (order.status !== "preparing") {
         order.status = "preparing";
         await order.save();
@@ -40,9 +80,9 @@ export const confirmOrderLogic = async (orderId: string) => {
         }
     }
 
-    // 3. Increment restaurant orderCount
-    if (order.restaurant) {
-        await Restaurant.findByIdAndUpdate(order.restaurant, {
+    // 3. Increment store orderCount
+    if (order.store) {
+        await Restaurant.findByIdAndUpdate(order.store, {
             $inc: { orderCount: 1 },
         });
     }
@@ -53,16 +93,13 @@ export const confirmOrderLogic = async (orderId: string) => {
     // 5. Generate invoice (idempotent)
     const invoiceExists = await Invoice.findOne({ order: orderId });
     if (!invoiceExists) {
-        const transaction = await PaymentTransaction.findOne({
-            order: orderId,
-            status: "success",
-        });
+        const transaction = await PaymentTransaction.findOne({ order: orderId, status: "success" });
 
         await Invoice.create({
             invoiceNumber: `INV-${Date.now()}-${order.orderNumber}`,
             order: order._id,
             customer: order.customer,
-            restaurant: order.restaurant,
+            store: order.store,
             items: order.items.map((i) => ({
                 name: i.name ?? "Item",
                 qty: i.qty,
@@ -77,15 +114,66 @@ export const confirmOrderLogic = async (orderId: string) => {
         });
     }
 
-    // 6. Notify restaurant — start preparing immediately
-    if (order.restaurant) {
-        emitNewOrderToRestaurant(order.restaurant.toString(), {
+    // 6. Create ledger entries (idempotent)
+    const ledgerExists = await Ledger.findOne({ order: orderId });
+    if (!ledgerExists) {
+        const { storeNet, driverNet, platformFee } = calculateSplit(
+            order.totalAmount,
+            order.deliveryCharge ?? 0
+        );
+
+        await Ledger.insertMany([
+            {
+                order: order._id,
+                orderNumber: order.orderNumber,
+                party: "store",
+                partyRef: order.store,
+                amount: storeNet,
+                status: "pending",
+            },
+            {
+                order: order._id,
+                orderNumber: order.orderNumber,
+                party: "driver",
+                partyRef: order.assignedDriver ?? order.store,
+                amount: driverNet,
+                status: "pending",
+            },
+            {
+                order: order._id,
+                orderNumber: order.orderNumber,
+                party: "platform",
+                partyRef: PLATFORM_REF_ID,
+                amount: platformFee,
+                status: "paid",
+                paidAt: new Date(),
+            },
+        ]);
+
+        console.log(
+            `[Ledger] ${order.orderNumber}: store=₹${storeNet}, driver=₹${driverNet}, platform=₹${platformFee}`
+        );
+    }
+
+    // 7. Notify store via socket
+    if (order.store) {
+        emitNewOrderToRestaurant(order.store.toString(), {
             orderId: order._id,
             orderNumber: order.orderNumber,
             items: order.items,
             totalAmount: order.totalAmount,
             address: order.address,
-            message: "New order — start preparing now",
+            message: "New order — start processing now",
         });
     }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Update driver ledger ref when order is delivered
+// ─────────────────────────────────────────────────────────────────────────────
+export const updateDriverLedgerRef = async (orderId: string, driverId: string) => {
+    await Ledger.updateOne(
+        { order: orderId, party: "driver" },
+        { partyRef: driverId }
+    );
 };

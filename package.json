@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@types/node-cron": "^3.0.11",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
@@ -24,6 +25,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.20.0",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "razorpay": "^2.9.6",
     "socket.io": "^4.8.1",
     "uuid": "^13.0.0",

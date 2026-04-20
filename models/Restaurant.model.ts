@@ -1,6 +1,7 @@
 import { Schema, model, Document } from "mongoose";
 
 export type FoodType = "veg" | "non-veg" | "vegan";
+export type StoreType = "restaurant" | "grocery";
 
 export interface IMenuItem {
     name: string;
@@ -14,6 +15,7 @@ export interface IMenuItem {
 export interface IRestaurant extends Document {
     name: string;
     slug: string;
+    storeType: StoreType;          // "restaurant" | "grocery"
     description?: string;
     address: string;
     location: {
@@ -24,11 +26,11 @@ export interface IRestaurant extends Document {
     email?: string;
     logo?: string;
     coverImage?: string;
-    menu: IMenuItem[];
+    menu: IMenuItem[];             // used by restaurants; grocery uses Product catalog
     isActive: boolean;
-    adminRating: number;   // 0–5, set only by admin
-    featured: boolean;     // admin-controlled boost flag
-    orderCount: number;    // incremented on each completed order
+    adminRating: number;
+    featured: boolean;
+    orderCount: number;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -49,6 +51,7 @@ const RestaurantSchema = new Schema<IRestaurant>(
     {
         name: { type: String, required: true, index: true },
         slug: { type: String, required: true, unique: true, index: true },
+        storeType: { type: String, enum: ["restaurant", "grocery"], default: "restaurant", index: true },
         description: { type: String },
         address: { type: String, required: true },
         location: {
@@ -76,6 +79,6 @@ const RestaurantSchema = new Schema<IRestaurant>(
 );
 
 RestaurantSchema.index({ location: "2dsphere" });
-RestaurantSchema.index({ isActive: 1, featured: -1, adminRating: -1, orderCount: -1 });
+RestaurantSchema.index({ isActive: 1, storeType: 1, featured: -1, adminRating: -1, orderCount: -1 });
 
 export default model<IRestaurant>("Restaurant", RestaurantSchema);

@@ -2,12 +2,13 @@ import { Schema, model, Document, Types } from "mongoose";
 
 export interface IProductVariant {
   sku?: string;
-  unit?: string; // e.g., "1kg", "500g", "piece"
+  unit?: string;           // e.g. "1kg", "500g", "piece", "dozen"
   price: number;
   mrp?: number;
   stock: number;
   images?: string[];
-  attributes?: Record<string, any>; // size/color, etc.
+  expiryDate?: Date;       // for perishable grocery items
+  attributes?: Record<string, any>;
 }
 
 export interface IProduct extends Document {
@@ -15,6 +16,7 @@ export interface IProduct extends Document {
   slug?: string;
   description?: string;
   categories?: Types.ObjectId[];
+  store?: Types.ObjectId;  // optional link to a Restaurant (grocery store or restaurant)
   variants: IProductVariant[];
   isActive: boolean;
   tags?: string[];
@@ -30,6 +32,7 @@ const VariantSchema = new Schema<IProductVariant>(
     mrp: { type: Number },
     stock: { type: Number, default: 0 },
     images: { type: [String], default: [] },
+    expiryDate: { type: Date },
     attributes: { type: Schema.Types.Mixed },
   },
   { _id: false }
@@ -41,6 +44,7 @@ const ProductSchema = new Schema<IProduct>(
     slug: { type: String, index: true, unique: true, sparse: true },
     description: { type: String },
     categories: [{ type: Schema.Types.ObjectId, ref: "Category" }],
+    store: { type: Schema.Types.ObjectId, ref: "Restaurant", default: null, index: true },
     variants: { type: [VariantSchema], default: [] },
     isActive: { type: Boolean, default: true },
     tags: { type: [String], default: [] },
@@ -48,8 +52,8 @@ const ProductSchema = new Schema<IProduct>(
   { timestamps: true }
 );
 
-// useful index for price-based queries or category listing
 ProductSchema.index({ "variants.price": 1 });
 ProductSchema.index({ categories: 1, isActive: 1 });
+ProductSchema.index({ store: 1, isActive: 1 });
 
 export default model<IProduct>("Product", ProductSchema);
