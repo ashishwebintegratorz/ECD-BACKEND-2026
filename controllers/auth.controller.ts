@@ -33,7 +33,7 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
  */
 export const verifyOtpController = asyncHandler(
   async (req: Request, res: Response) => {
-    const { phone, code, role, pin } = req.body;
+    const { phone, code, role, pin, name } = req.body;
 
     if (!phone || !code) {
       throw new BadRequestException("Phone and OTP code are required");
@@ -44,13 +44,17 @@ export const verifyOtpController = asyncHandler(
       throw new BadRequestException(verification.reason || "Invalid OTP");
     }
 
-    const user = await findOrCreateUserByPhone(phone, role as any);
+    const isAdmin = role === "admin";
 
-    const isDriverOrAdmin =
-      user.role === "driver" ||
-      user.role === "admin";
+    // Enforce PIN only for admin on first registration
+    if (isAdmin && !pin) {
+      throw new BadRequestException("PIN is required for admin accounts");
+    }
 
-    if (isDriverOrAdmin && pin) {
+    const user = await findOrCreateUserByPhone(phone, role as any, name);
+
+    // Set PIN only for admin
+    if (isAdmin && pin) {
       await setUserPin(user, pin);
     }
 
@@ -65,7 +69,7 @@ export const verifyOtpController = asyncHandler(
 );
 
 /**
- * Login with PIN (driver/admin)
+ * Admin PIN Login — phone + PIN only, no OTP needed
  */
 export const loginWithPin = asyncHandler(
   async (req: Request, res: Response) => {
@@ -74,13 +78,14 @@ export const loginWithPin = asyncHandler(
     const user = await UserModel.findOne({ phone });
     if (!user) throw new NotFoundException("User not found");
 
-    if (user.role !== "driver" && user.role !== "admin") {
-      throw new BadRequestException("PIN login is only for driver/admin");
+    // PIN login is admin-only
+    if (user.role !== "admin") {
+      throw new BadRequestException("PIN login is only for admin accounts");
     }
 
     if (!user.pinHash) {
       throw new BadRequestException(
-        "PIN not set. Login via OTP first to set PIN."
+        "PIN not set. Please register via OTP first to set your PIN."
       );
     }
 

@@ -196,7 +196,7 @@ FRONTEND_ORIGIN=http://localhost:3000
 
 ## 📚 API Documentation
 
-Base URL: `http://localhost:5000/api`
+Base URL: `http://localhost:5000/api/v1`
 
 ---
 
