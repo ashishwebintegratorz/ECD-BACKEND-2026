@@ -71,12 +71,21 @@ export const confirmOrderLogic = async (orderId: string) => {
         await order.save();
     }
 
-    // 2. Decrement product stock
+    // 2. Decrement product stock atomically — prevents overselling race condition
     for (const item of order.items) {
         if (item.variantIndex !== undefined) {
-            await Product.findByIdAndUpdate(item.product, {
-                $inc: { [`variants.${item.variantIndex}.stock`]: -item.qty },
-            });
+            const updated = await Product.findOneAndUpdate(
+                {
+                    _id: item.product,
+                    [`variants.${item.variantIndex}.stock`]: { $gte: item.qty },
+                },
+                {
+                    $inc: { [`variants.${item.variantIndex}.stock`]: -item.qty },
+                }
+            );
+            if (!updated) {
+                console.warn(`[ECD KART] Stock insufficient for product ${item.product} — order ${orderId}`);
+            }
         }
     }
 
@@ -131,14 +140,8 @@ export const confirmOrderLogic = async (orderId: string) => {
                 amount: storeNet,
                 status: "pending",
             },
-            {
-                order: order._id,
-                orderNumber: order.orderNumber,
-                party: "driver",
-                partyRef: order.assignedDriver ?? order.store,
-                amount: driverNet,
-                status: "pending",
-            },
+            // Driver ledger NOT created here — created when driver actually delivers
+            // See: updateDriverLedgerRef() called from orders.controller.ts on delivery
             {
                 order: order._id,
                 orderNumber: order.orderNumber,
@@ -169,11 +172,27 @@ export const confirmOrderLogic = async (orderId: string) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Update driver ledger ref when order is delivered
+// Create driver ledger entry when order is delivered
+// Called from orders.controller.ts after OTP verification
 // ─────────────────────────────────────────────────────────────────────────────
 export const updateDriverLedgerRef = async (orderId: string, driverId: string) => {
-    await Ledger.updateOne(
-        { order: orderId, party: "driver" },
-        { partyRef: driverId }
-    );
+    const order = await Order.findById(orderId);
+    if (!order) return;
+
+    // Check if driver ledger already exists (idempotent)
+    const exists = await Ledger.findOne({ order: orderId, party: "driver" });
+    if (exists) return;
+
+    const { driverNet } = calculateSplit(order.totalAmount, order.deliveryCharge ?? 0);
+
+    await Ledger.create({
+        order: order._id,
+        orderNumber: order.orderNumber,
+        party: "driver",
+        partyRef: driverId,
+        amount: driverNet,
+        status: "pending",
+    });
+
+    console.log(`[ECD KART] Driver ledger created for ${order.orderNumber}: driver=₹${driverNet}`);
 };
