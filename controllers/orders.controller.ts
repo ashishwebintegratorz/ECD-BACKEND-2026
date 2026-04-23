@@ -5,6 +5,18 @@ import { razorpay } from "../config/razorpay.config.js";
 import crypto from "crypto";
 import { Request, Response } from "express";
 import { confirmOrderLogic, updateDriverLedgerRef, validateCartStock } from "../services/order.service.js";
+import { createRefundRecord } from "../services/refund.service.js";
+import { validateCoupon, incrementCouponUsage } from "../services/coupon.service.js";
+import {
+  notifyOrderPlaced,
+  notifyOrderReady,
+  notifyDriverAssigned,
+  notifyDriverAccepted,
+  notifyOutForDelivery,
+  notifyOrderDelivered,
+  notifyOrderCancelled,
+  notifyRefundInitiated,
+} from "../services/notification.service.js";
 import User from "../models/User.model.js";
 import {
   emitOrderStatusUpdate,
@@ -13,6 +25,12 @@ import {
 } from "../socket/orderSocket.js";
 import Address from "../models/Address.model.js";
 import { calculateDeliveryCharge, isWithinIndore } from "../utils/delivery.utils.js";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: generate a 4-digit numeric OTP
+// ─────────────────────────────────────────────────────────────────────────────
+const generateDeliveryOtp = (): string =>
+  String(Math.floor(1000 + Math.random() * 9000));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: log a cancellation entry onto the order itself
@@ -36,7 +54,7 @@ const logCancellation = (
 // ─────────────────────────────────────────────────────────────────────────────
 export const createOrder = async (req: Request, res: Response) => {
   const userId = req.user.id;
-  const { addressId, paymentMethod, restaurantId } = req.body;
+  const { addressId, paymentMethod, restaurantId, couponCode } = req.body;
 
   if (!addressId) return res.status(400).json({ message: "Address is required" });
   if (!restaurantId) return res.status(400).json({ message: "Store is required" });
@@ -74,7 +92,21 @@ export const createOrder = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Minimum order amount is ₹100" });
 
   const deliveryCharge = calculateDeliveryCharge(totalAmount);
-  const payableAmount = totalAmount + deliveryCharge;
+  let payableAmount = totalAmount + deliveryCharge;
+
+  // ── Coupon validation ─────────────────────────────────────────────────────
+  let appliedCoupon: { couponId: string; code: string; discountAmount: number } | undefined;
+  if (couponCode) {
+    const couponResult = await validateCoupon(couponCode, userId, restaurantId, totalAmount);
+    if (!couponResult.ok)
+      return res.status(400).json({ message: couponResult.message });
+    appliedCoupon = {
+      couponId: couponResult.couponId!,
+      code: couponCode.toUpperCase().trim(),
+      discountAmount: couponResult.discountAmount!,
+    };
+    payableAmount = Math.max(0, payableAmount - appliedCoupon.discountAmount);
+  }
 
   const order = await Order.create({
     orderNumber: `ORD-${Date.now()}`,
@@ -94,6 +126,7 @@ export const createOrder = async (req: Request, res: Response) => {
     address: addressSnapshot,
     status: "pending",
     deliveryStatus: "pending",
+    ...(appliedCoupon && { coupon: appliedCoupon }),
   });
 
   // COD flow
@@ -105,7 +138,17 @@ export const createOrder = async (req: Request, res: Response) => {
       status: "success",
     });
     await confirmOrderLogic(order._id.toString());
+
+    // Increment coupon usage if applied
+    if (appliedCoupon) await incrementCouponUsage(appliedCoupon.couponId);
+
+    // Auto-generate delivery OTP for customer
+    const deliveryOtp = generateDeliveryOtp();
+    await User.findByIdAndUpdate(userId, { deliveryOtp });
+
     const updatedOrder = await Order.findById(order._id);
+    // Push: order placed
+    notifyOrderPlaced(userId, order.orderNumber).catch(() => { });
     return res.json({ order: updatedOrder, cod: true });
   }
 
@@ -158,6 +201,13 @@ export const verifyPayment = async (req: Request, res: Response) => {
 
   await confirmOrderLogic(transaction.order.toString());
 
+  // Auto-generate delivery OTP for customer after Razorpay payment
+  const confirmedOrder = await Order.findById(transaction.order);
+  if (confirmedOrder) {
+    const deliveryOtp = generateDeliveryOtp();
+    await User.findByIdAndUpdate(confirmedOrder.customer, { deliveryOtp });
+  }
+
   return res.json({ success: true });
 };
 
@@ -175,6 +225,9 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
 
   order.status = "ready";
   await order.save();
+
+  // Push: order ready
+  notifyOrderReady(order.customer.toString(), order.orderNumber).catch(() => { });
 
   emitOrderStatusUpdate(orderId, {
     status: order.status,
@@ -210,6 +263,20 @@ export const restaurantCancelOrder = async (req: Request, res: Response) => {
 
   await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
 
+  // Create refund record — processed within 24 hours via cron
+  await createRefundRecord(
+    orderId,
+    order.orderNumber,
+    order.customer.toString(),
+    order.payableAmount,
+    `Restaurant cancelled: ${reason.trim()}`,
+    "restaurant"
+  );
+
+  // Push: notify customer of cancellation + refund
+  notifyOrderCancelled(order.customer.toString(), order.orderNumber, reason.trim()).catch(() => { });
+  notifyRefundInitiated(order.customer.toString(), order.payableAmount, order.orderNumber).catch(() => { });
+
   emitOrderStatusUpdate(orderId, {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
@@ -242,6 +309,20 @@ export const cancelOrder = async (req: Request, res: Response) => {
   await order.save();
 
   await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
+
+  // Create refund record — processed within 24 hours via cron
+  await createRefundRecord(
+    orderId,
+    order.orderNumber,
+    userId,
+    order.payableAmount,
+    cancelReason,
+    "customer"
+  );
+
+  // Push: notify customer of cancellation + refund
+  notifyOrderCancelled(userId, order.orderNumber).catch(() => { });
+  notifyRefundInitiated(userId, order.payableAmount, order.orderNumber).catch(() => { });
 
   emitOrderStatusUpdate(orderId, {
     status: order.status,
@@ -281,6 +362,9 @@ export const assignOrderToDriver = async (req: Request, res: Response) => {
   order.deliveryStatus = "driver_notified";
   await order.save();
 
+  // Push: notify driver
+  notifyDriverAssigned(driverId, order.orderNumber, order._id.toString()).catch(() => { });
+
   emitOrderAssignedToDriver(driverId, {
     orderId: order._id,
     orderNumber: order.orderNumber,
@@ -306,6 +390,9 @@ export const driverAcceptOrder = async (req: Request, res: Response) => {
 
   order.deliveryStatus = "accepted";
   await order.save();
+
+  // Push: notify customer driver accepted
+  notifyDriverAccepted(order.customer.toString(), order.orderNumber).catch(() => { });
 
   emitOrderStatusUpdate(orderId, {
     status: order.status,
@@ -376,6 +463,14 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
   if (status === "delivered") order.status = "ready";
   await order.save();
 
+  // Push notifications per delivery status
+  if (status === "out_for_delivery") {
+    notifyOutForDelivery(order.customer.toString(), order.orderNumber).catch(() => { });
+  }
+  if (status === "delivered") {
+    notifyOrderDelivered(order.customer.toString(), order.orderNumber).catch(() => { });
+  }
+
   // Update driver ledger ref now that we know who delivered
   if (status === "delivered") {
     await updateDriverLedgerRef(orderId, driverId);
@@ -400,8 +495,29 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CUSTOMER: Get My Orders
+// CUSTOMER: Get / Regenerate Delivery OTP
+// Called after order is assigned to driver — customer shares this with driver
 // ─────────────────────────────────────────────────────────────────────────────
+export const getDeliveryOtp = async (req: Request, res: Response) => {
+  const userId = req.user.id;
+  const { orderId } = req.params;
+
+  const order = await Order.findOne({ _id: orderId, customer: userId });
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  if (!["preparing", "ready"].includes(order.status))
+    return res.status(400).json({ message: "OTP is only available once order is being prepared" });
+
+  // Generate and save OTP to customer
+  const otp = generateDeliveryOtp();
+  await User.findByIdAndUpdate(userId, { deliveryOtp: otp });
+
+  return res.json({
+    message: "Delivery OTP generated",
+    otp,
+    note: "Share this OTP with the delivery rider to confirm delivery",
+  });
+};
 export const getMyOrders = async (req: Request, res: Response) => {
   const orders = await Order.find({ customer: req.user.id })
     .sort({ createdAt: -1 })

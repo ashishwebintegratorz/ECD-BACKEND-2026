@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import Ledger from "../models/Ledger.model.js";
 import { format } from "date-fns";
+import { processPendingRefunds } from "./refund.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WEEKLY CRON — Pay Restaurant
@@ -106,7 +107,13 @@ export const registerPayoutCrons = () => {
         timezone: "Asia/Kolkata",
     });
 
-    console.log("[Cron] Payout cron jobs registered:");
+    console.log("[ECD KART Cron] Payout cron jobs registered:");
     console.log("  Restaurant payout → Every Monday at 3:00 AM IST");
     console.log("  Driver payout     → 1st of every month at 3:00 AM IST");
+
+    // Every hour — process pending Razorpay refunds
+    cron.schedule("0 * * * *", processPendingRefunds, {
+        timezone: "Asia/Kolkata",
+    });
+    console.log("  Refund processor  → Every hour");
 };

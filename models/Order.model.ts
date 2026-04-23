@@ -53,6 +53,7 @@ export interface IOrder extends Document {
   cancellationReason?: string;
   cancelledBy?: CancelledBy;
   cancellationLog: ICancellationLog[];
+  coupon?: { couponId: Types.ObjectId; code: string; discountAmount: number }; // applied coupon
   meta?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
@@ -98,6 +99,11 @@ const OrderSchema = new Schema<IOrder>(
     cancellationReason: { type: String },
     cancelledBy: { type: String, enum: ["customer", "restaurant", "driver", "admin"] },
     cancellationLog: { type: [CancellationLogSchema], default: [] },
+    coupon: {
+      couponId: { type: Schema.Types.ObjectId, ref: "Coupon" },
+      code: { type: String },
+      discountAmount: { type: Number },
+    },
     meta: { type: Schema.Types.Mixed },
   },
   { timestamps: true }
