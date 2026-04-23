@@ -139,6 +139,7 @@ export const getRestaurantBySlug = async (req: Request, res: Response) => {
             _id: restaurant._id,
             name: restaurant.name,
             slug: restaurant.slug,
+            storeType: restaurant.storeType,  // "restaurant" | "grocery"
             description: restaurant.description,
             address: restaurant.address,
             location: restaurant.location,

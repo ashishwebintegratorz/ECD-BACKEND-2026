@@ -62,3 +62,9 @@ export function emitOrderAssignedToDriver(driverId: string, payload: any) {
   if (!io) return;
   io.to(`driver_${driverId}`).emit("orderAssigned", payload);
 }
+
+// Emit driver GPS location to admin room in real-time
+export function emitDriverLocation(driverId: string, payload: any) {
+  if (!io) return;
+  io.to("admins").emit("driverLocationUpdated", { driverId, ...payload });
+}

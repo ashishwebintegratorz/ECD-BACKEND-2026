@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import UserModel from "../models/User.model.js";
 import OrderModel from "../models/Order.model.js";
+import DriverLocation from "../models/DriverLocation.model.js";
+import { emitDriverLocation } from "../socket/orderSocket.js";
 
 /**
  * Get all drivers with their busy status
@@ -81,4 +83,44 @@ export const markReachedStoreStatus = asyncHandler(async (req: Request, res: Res
     );
 
     return res.json({ message: "Welcome back! You are now available for new orders.", user: updatedUser });
+});
+
+/**
+ * Driver: Update live GPS location
+ * Called by driver app every 10-15 seconds while on delivery
+ */
+export const updateDriverLocation = asyncHandler(async (req: Request, res: Response) => {
+    const driverId = (req as any).user._id.toString();
+    const { lat, lng, speed, heading } = req.body;
+
+    if (lat === undefined || lng === undefined)
+        return res.status(400).json({ message: "lat and lng are required" });
+
+    // Upsert — one location doc per driver
+    await DriverLocation.findOneAndUpdate(
+        { driver: driverId },
+        {
+            driver: driverId,
+            location: { type: "Point", coordinates: [Number(lng), Number(lat)] },
+            speed: speed ? Number(speed) : undefined,
+            heading: heading ? Number(heading) : undefined,
+        },
+        { upsert: true, new: true }
+    );
+
+    // Emit to admin room in real-time
+    emitDriverLocation(driverId, { lat: Number(lat), lng: Number(lng), speed, heading });
+
+    return res.json({ message: "Location updated" });
+});
+
+/**
+ * Admin: Get all driver locations
+ */
+export const getAllDriverLocations = asyncHandler(async (_req: Request, res: Response) => {
+    const locations = await DriverLocation.find()
+        .populate("driver", "name phone isOnline isReturning")
+        .sort({ updatedAt: -1 });
+
+    return res.json({ locations });
 });
