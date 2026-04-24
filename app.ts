@@ -9,7 +9,6 @@ import { asyncHandler } from "./middlewares/asyncHandler.middleware.js";
 import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
-import productRoutes from "./routes/product.route.js";
 import categoryRoutes from "./routes/categories.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
 import addressRoutes from "./routes/address.routes.js";
@@ -24,6 +23,7 @@ import ledgerRoutes from "./routes/ledger.routes.js";
 import refundRoutes from "./routes/refund.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import couponRoutes from "./routes/coupon.routes.js";
+import groceryRoutes from "./routes/grocery.route.js";
 
 const app = express();
 const BASE_PATH = config.BASE_PATH;
@@ -81,7 +81,6 @@ app.get(
 app.use(`${BASE_PATH}/auth`, otpLimiter, authRoutes);
 app.use(`${BASE_PATH}/user`, userRoutes);
 app.use(`${BASE_PATH}/admin`, adminRoutes);
-app.use(`${BASE_PATH}/products`, productRoutes);
 app.use(`${BASE_PATH}/categories`, categoryRoutes);
 app.use(`${BASE_PATH}/cart`, cartRoutes);
 app.use(`${BASE_PATH}/addresses`, addressRoutes);
@@ -95,6 +94,7 @@ app.use(`${BASE_PATH}/ledger`, ledgerRoutes);
 app.use(`${BASE_PATH}/refunds`, refundRoutes);
 app.use(`${BASE_PATH}/notifications`, notificationRoutes);
 app.use(`${BASE_PATH}/coupons`, couponRoutes);
+app.use(`${BASE_PATH}/grocery`, groceryRoutes);
 
 // app.use(`${BASE_PATH}/razorpay`, razorpayRoutes); // Moved up
 
