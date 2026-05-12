@@ -33,6 +33,7 @@ export async function createAndSendOtp(
   await OtpModel.deleteMany({ phone });
 
   const code = generateOtpCode();
+  console.log("OTP CODE:", code);
 
   const codeHash =
     await bcrypt.hash(code, 10);
@@ -58,7 +59,7 @@ export async function createAndSendOtp(
 
   });
 
-  try {
+  /*try {
 
     const apiKey =
       process.env.TWO_FACTOR_API_KEY;
@@ -75,7 +76,7 @@ export async function createAndSendOtp(
 
     console.log(error);
 
-  }
+  }*/
 
   return { ok: true };
 
