@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import Restaurant from "../models/Restaurant.model.js";
+import Product from "../models/Product.model.js";
 import { NotFoundException, BadRequestException } from "../utils/appError.js";
 import { slugify } from "../validators/restaurant.validator.js";
 import { Types } from "mongoose";
@@ -116,6 +117,120 @@ export const getRestaurants = async (req: Request, res: Response) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC: GET /api/restaurants/search?query=biryani
+// ─────────────────────────────────────────────────────────────────────────────
+export const searchRestaurants = async (req: Request, res: Response) => {
+    const query = (req.query.query as string) || (req.query.search as string) || "";
+    if (!query) {
+        return res.json({ success: true, restaurants: [] });
+    }
+
+    const regex = new RegExp(query, "i");
+
+    // 1. Find products matching the query and get their store IDs
+    const matchingProducts = await Product.find({
+        name: regex,
+        isActive: true,
+        store: { $ne: null },
+    })
+        .select("store")
+        .lean();
+
+    const storeIdsFromProducts = matchingProducts.map((p) => p.store).filter((s) => s !== null);
+
+    // 2. Search in Restaurant: Name, Categories, Menu Items, or linked via Products
+    const restaurants = await Restaurant.find({
+        isActive: true,
+        $or: [
+            { name: regex },
+            { categories: { $in: [regex] } },
+            { "menu.name": regex },
+            { description: regex },
+            { _id: { $in: storeIdsFromProducts } },
+        ],
+    })
+        .select("name slug description address location logo coverImage categories adminRating featured orderCount")
+        .sort({ featured: -1, adminRating: -1, orderCount: -1 })
+        .limit(50)
+        .lean();
+
+    return res.json({
+        success: true,
+        count: restaurants.length,
+        restaurants,
+    });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC: GET /api/restaurants/suggestions?query=biry
+// ─────────────────────────────────────────────────────────────────────────────
+export const getSuggestions = async (req: Request, res: Response) => {
+    const query = (req.query.query as string) || "";
+    if (!query || query.length < 2) {
+        return res.json({ suggestions: [] });
+    }
+
+    const regex = new RegExp(query, "i");
+
+    // 1. Find matching restaurant names
+    const restaurantMatches = await Restaurant.find({
+        isActive: true,
+        name: regex,
+    })
+        .select("name logo slug")
+        .limit(5)
+        .lean();
+
+    // 2. Find matching items (from Restaurant menu AND Product collection)
+    const [menuItemMatches, productMatches] = await Promise.all([
+        Restaurant.aggregate([
+            { $match: { isActive: true } },
+            { $unwind: "$menu" },
+            { $match: { "menu.name": regex, "menu.isAvailable": true } },
+            { $group: { _id: "$menu.name" } },
+            { $limit: 5 },
+        ]),
+        Product.find({
+            name: regex,
+            isActive: true,
+        })
+            .distinct("name")
+            .then((names) => names.slice(0, 5)),
+    ]);
+
+    // 3. Find matching categories
+    const categoryMatches = await Restaurant.distinct("categories", {
+        isActive: true,
+        categories: regex,
+    });
+
+    // Combine and Deduplicate item suggestions
+    const itemSuggestions = Array.from(new Set([...menuItemMatches.map((i) => i._id), ...productMatches])).slice(0, 7);
+
+    const suggestions = [
+        ...restaurantMatches.map((r) => ({
+            type: "restaurant",
+            text: r.name,
+            slug: r.slug,
+            logo: r.logo,
+        })),
+        ...itemSuggestions.map((text) => ({
+            type: "item",
+            text,
+        })),
+        ...categoryMatches.slice(0, 5).map((c) => ({
+            type: "category",
+            text: c,
+        })),
+    ];
+
+    return res.json({
+        success: true,
+        suggestions,
+    });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: GET /api/restaurants/details/:slug
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurantBySlug = async (req: Request, res: Response) => {
@@ -180,7 +295,7 @@ export const getRestaurantMenu = async (req: Request, res: Response) => {
 // ADMIN: POST /api/restaurants/admin/create
 // ─────────────────────────────────────────────────────────────────────────────
 export const createRestaurant = async (req: Request, res: Response) => {
-    const { name, description, address, phone, email, logo, coverImage, lat, lng } = req.body;
+    const { name, description, address, phone, email, logo, coverImage, lat, lng, categories } = req.body;
 
     // Auto-generate slug if not provided, ensure uniqueness
     let slug: string = req.body.slug ? req.body.slug : slugify(name);
@@ -201,6 +316,7 @@ export const createRestaurant = async (req: Request, res: Response) => {
         email,
         logo,
         coverImage,
+        categories: categories || [],
     });
 
     return res.status(201).json({ message: "Restaurant created", restaurant });
@@ -214,7 +330,7 @@ export const updateRestaurant = async (req: Request, res: Response) => {
     if (!restaurant) throw new NotFoundException("Restaurant not found");
 
     const { name, slug, description, address, phone, email,
-        logo, coverImage, isActive, featured, lat, lng } = req.body;
+        logo, coverImage, isActive, featured, lat, lng, categories } = req.body;
 
     if (slug && slug !== restaurant.slug) {
         const taken = await Restaurant.findOne({ slug });
@@ -239,6 +355,7 @@ export const updateRestaurant = async (req: Request, res: Response) => {
             ...(coverImage !== undefined && { coverImage }),
             ...(isActive !== undefined && { isActive }),
             ...(featured !== undefined && { featured }),
+            ...(categories !== undefined && { categories }),
             location,
         },
         { new: true, runValidators: true }

@@ -1,6 +1,8 @@
 import { Router } from "express";
 import {
     getRestaurants,
+    searchRestaurants,
+    getSuggestions,
     getRestaurantBySlug,
     getRestaurantMenu,
     createRestaurant,
@@ -31,6 +33,12 @@ const router = Router();
 
 // GET /api/restaurants/list?page=1&limit=10&search=&lat=&lng=
 router.get("/list", asyncHandler(getRestaurants));
+
+// GET /api/restaurants/search?query=biryani
+router.get("/search", asyncHandler(searchRestaurants));
+
+// GET /api/restaurants/suggestions?query=biry
+router.get("/suggestions", asyncHandler(getSuggestions));
 
 // GET /api/restaurants/details/:slug
 router.get("/details/:slug", asyncHandler(getRestaurantBySlug));

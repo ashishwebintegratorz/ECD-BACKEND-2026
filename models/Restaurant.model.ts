@@ -27,6 +27,7 @@ export interface IRestaurant extends Document {
     logo?: string;
     coverImage?: string;
     menu: IMenuItem[];             // used by restaurants; grocery uses Product catalog
+    categories?: string[];         // e.g. ["Indian", "Biryani"]
     isActive: boolean;
     adminRating: number;
     featured: boolean;
@@ -70,6 +71,7 @@ const RestaurantSchema = new Schema<IRestaurant>(
         logo: { type: String },
         coverImage: { type: String },
         menu: { type: [MenuItemSchema], default: [] },
+        categories: { type: [String], default: [], index: true },
         isActive: { type: Boolean, default: true, index: true },
         adminRating: { type: Number, default: 0, min: 0, max: 5 },
         featured: { type: Boolean, default: false, index: true },

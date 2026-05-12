@@ -22,6 +22,7 @@ export const createRestaurantSchema = z.object({
         email: optionalEmail,
         logo: optionalUrl,
         coverImage: optionalUrl,
+        categories: z.array(z.string()).optional(),
     }),
 });
 
@@ -42,6 +43,7 @@ export const updateRestaurantSchema = z.object({
         isActive: z.boolean().optional(),
         featured: z.boolean().optional(),
         storeType: z.enum(["restaurant", "grocery"]).optional(),
+        categories: z.array(z.string()).optional(),
     }),
 });
 

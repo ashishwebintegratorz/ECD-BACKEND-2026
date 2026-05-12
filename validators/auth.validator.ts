@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, "Phone must be exactly 10 digits");
+const phoneSchema = z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits");
 
 export const sendOtpSchema = z.object({
   body: z.object({
