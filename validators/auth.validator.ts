@@ -12,7 +12,7 @@ export const sendOtpSchema = z.object({
 export const verifyOtpSchema = z.object({
   body: z.object({
     phone: phoneSchema,
-    code: z.string().length(6, "OTP must be 6 digits"),
+    code: z.string().length(4, "OTP must be 4 digits"),
     role: z.enum(["customer", "driver", "admin"]).optional(),
     name: z.string().min(2, "Name must be at least 2 characters").optional(),
     pin: z.string().min(4, "PIN must be at least 4 digits").max(10).optional(),

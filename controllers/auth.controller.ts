@@ -22,7 +22,7 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
   await createAndSendOtp(phone);
 
   return res.json({
-    message: `OTP sent on WhatsApp (dummy) for ${role || "customer"} login`,
+    message: `OTP sent on WhatsApp for ${role || "customer"} login`,
   });
 });
 

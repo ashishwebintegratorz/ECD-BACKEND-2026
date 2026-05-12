@@ -3,7 +3,7 @@ import OtpModel from "../models/Otp.model.js";
 import { config } from "../config/app.config.js";
 import { sendSms } from "../utils/sms.provider.js";
 
-const OTP_LENGTH = 6;
+const OTP_LENGTH = 4;
 const OTP_MAX_ATTEMPTS = 5;
 
 const OTP_TTL_MINUTES = Number(config.OTP_EXPIRES_MINUTES || "5");
