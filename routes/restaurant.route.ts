@@ -3,6 +3,7 @@ import {
     getRestaurants,
     searchRestaurants,
     getSuggestions,
+    getRestaurantsByCategory,
     getRestaurantBySlug,
     getRestaurantMenu,
     createRestaurant,
@@ -39,6 +40,9 @@ router.get("/search", asyncHandler(searchRestaurants));
 
 // GET /api/restaurants/suggestions?query=biry
 router.get("/suggestions", asyncHandler(getSuggestions));
+
+// GET /api/restaurants/by-category/:slug
+router.get("/by-category/:slug", asyncHandler(getRestaurantsByCategory));
 
 // GET /api/restaurants/details/:slug
 router.get("/details/:slug", asyncHandler(getRestaurantBySlug));

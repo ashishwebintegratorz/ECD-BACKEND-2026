@@ -127,18 +127,7 @@ export const searchRestaurants = async (req: Request, res: Response) => {
 
     const regex = new RegExp(query, "i");
 
-    // 1. Find products matching the query and get their store IDs
-    const matchingProducts = await Product.find({
-        name: regex,
-        isActive: true,
-        store: { $ne: null },
-    })
-        .select("store")
-        .lean();
-
-    const storeIdsFromProducts = matchingProducts.map((p) => p.store).filter((s) => s !== null);
-
-    // 2. Search in Restaurant: Name, Categories, Menu Items, or linked via Products
+    // Search in Restaurant: Name, Categories (string array), Menu Items
     const restaurants = await Restaurant.find({
         isActive: true,
         $or: [
@@ -146,7 +135,6 @@ export const searchRestaurants = async (req: Request, res: Response) => {
             { categories: { $in: [regex] } },
             { "menu.name": regex },
             { description: regex },
-            { _id: { $in: storeIdsFromProducts } },
         ],
     })
         .select("name slug description address location logo coverImage categories adminRating featured orderCount")
@@ -158,6 +146,38 @@ export const searchRestaurants = async (req: Request, res: Response) => {
         success: true,
         count: restaurants.length,
         restaurants,
+    });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC: GET /api/restaurants/by-category/:slug
+// ─────────────────────────────────────────────────────────────────────────────
+export const getRestaurantsByCategory = async (req: Request, res: Response) => {
+    const { slug } = req.params;
+    
+    // 1. Find the category to get its name
+    const category = await Category.findOne({ slug });
+    
+    // 2. Search restaurants that have this category name or matching items
+    const query = category ? category.name : slug;
+    const regex = new RegExp(query, "i");
+
+    const restaurants = await Restaurant.find({
+        isActive: true,
+        $or: [
+            { categories: { $in: [regex] } },
+            { "menu.name": regex }
+        ]
+    })
+    .sort({ featured: -1, adminRating: -1, orderCount: -1 })
+    .limit(50)
+    .lean();
+
+    return res.json({
+        success: true,
+        category: category?.name || slug,
+        count: restaurants.length,
+        restaurants
     });
 };
 

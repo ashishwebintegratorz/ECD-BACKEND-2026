@@ -554,11 +554,98 @@ export const getDeliveryOtp = async (req: Request, res: Response) => {
     note: "Share this OTP with the delivery rider to confirm delivery",
   });
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMER: Get My Orders (Grouped for Active/Past/Cancelled Tabs)
+// ─────────────────────────────────────────────────────────────────────────────
 export const getMyOrders = async (req: Request, res: Response) => {
-  const orders = await Order.find({ customer: req.user.id })
+  const userId = req.user.id;
+  const orders = await Order.find({ customer: userId })
     .sort({ createdAt: -1 })
-    .populate("paymentTransaction");
-  return res.json(orders);
+    .populate("paymentTransaction")
+    .populate("store", "name slug logo address")
+    .lean();
+
+  const active = orders.filter((o) => 
+    !["delivered", "failed", "cancelled"].includes(o.deliveryStatus) && 
+    o.status !== "cancelled"
+  );
+  
+  const past = orders.filter((o) => o.deliveryStatus === "delivered");
+  const cancelled = orders.filter((o) => 
+    o.status === "cancelled" || o.deliveryStatus === "cancelled"
+  );
+
+  return res.json({
+    success: true,
+    active,
+    past,
+    cancelled,
+  });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMER: Get Order Tracking Detail (Map + Progress)
+// ─────────────────────────────────────────────────────────────────────────────
+import DriverLocation from "../models/DriverLocation.model.js";
+import { getRouteFromORS } from "../services/tracking.service.js";
+
+export const getOrderTracking = async (req: Request, res: Response) => {
+  const { orderId } = req.params;
+  const userId = req.user.id;
+
+  const order = await Order.findOne({ _id: orderId, customer: userId })
+    .populate("store", "name location address phone logo")
+    .populate("assignedDriver", "name phone avatar")
+    .lean();
+
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  let driverLocation = null;
+  let route = null;
+
+  // 1. Get driver location if assigned
+  if (order.assignedDriver) {
+    driverLocation = await DriverLocation.findOne({ driver: (order.assignedDriver as any)._id })
+      .sort({ updatedAt: -1 })
+      .lean();
+  }
+
+  // 2. Fetch Route from ORS
+  // Logic: 
+  // - If out_for_delivery: Route from Driver to Customer
+  // - If preparing/ready: Route from Restaurant to Customer
+  const customerLoc = order.address?.location?.coordinates; // [lng, lat]
+  
+  if (customerLoc && customerLoc.length === 2) {
+    let startLoc = null;
+
+    if (order.deliveryStatus === "out_for_delivery" && driverLocation) {
+      startLoc = driverLocation.location.coordinates;
+    } else if (["preparing", "ready"].includes(order.status) && (order.store as any).location) {
+      startLoc = (order.store as any).location.coordinates;
+    }
+
+    if (startLoc && startLoc.length === 2) {
+      route = await getRouteFromORS(
+        { lng: startLoc[0], lat: startLoc[1] },
+        { lng: customerLoc[0], lat: customerLoc[1] }
+      );
+    }
+  }
+
+  // Calculate current step for frontend progress bar (0-3)
+  let currentStep = 0; // Order Placed
+  if (["preparing", "ready"].includes(order.status)) currentStep = 1; // Preparing
+  if (order.deliveryStatus === "out_for_delivery") currentStep = 2; // On the way
+  if (order.deliveryStatus === "delivered") currentStep = 3; // Delivered
+
+  return res.json({
+    success: true,
+    order,
+    driverLocation,
+    route, // Polyline + distance + duration
+    currentStep,
+  });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ import ledgerRoutes from "./routes/ledger.routes.js";
 import refundRoutes from "./routes/refund.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import couponRoutes from "./routes/coupon.routes.js";
+import popularDishRoutes from "./routes/popularDish.routes.js";
 import groceryRoutes from "./routes/grocery.route.js";
 import { razorpayWebhook } from "./controllers/razorpay.controller.js";
 
@@ -99,7 +100,8 @@ app.use(`${BASE_PATH}/ledger`, ledgerRoutes);
 app.use(`${BASE_PATH}/refunds`, refundRoutes);
 app.use(`${BASE_PATH}/notifications`, notificationRoutes);
 app.use(`${BASE_PATH}/coupons`, couponRoutes);
-app.use(`${BASE_PATH}/grocery`, groceryRoutes);
+app.use(`${BASE_PATH}/popular-dishes`, popularDishRoutes);
+// app.use(`${BASE_PATH}/grocery`, groceryRoutes); // Grocery services disabled
 
 app.use(`${BASE_PATH}/razorpay`, razorpayRoutes);
 

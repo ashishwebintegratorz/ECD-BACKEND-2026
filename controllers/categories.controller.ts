@@ -1,16 +1,29 @@
 import { Request, Response } from "express";
 import Category from "../models/Category.model.js";
+import cloudinary from "../config/cloudinary.js";
 import { BadRequestException, NotFoundException } from "../utils/appError.js";
 
 // Create slug helper
 const toSlug = (name: string) =>
   name.toLowerCase().trim().replace(/\s+/g, "-");
 
+const uploadToCloudinary = (file: Express.Multer.File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "categories" },
+      (err, result) => {
+        if (err || !result) return reject(err);
+        resolve(result.secure_url);
+      }
+    );
+    stream.end(file.buffer);
+  });
+
 // ----------------------------
 // 1️⃣ Add Category
 // ----------------------------
 export const addCategory = async (req: Request, res: Response) => {
-  const { name, parent, ordering } = req.body;
+  const { name, parent, ordering, imageUrl } = req.body;
 
   if (!name) {
     throw new BadRequestException("Category name is required");
@@ -24,11 +37,20 @@ export const addCategory = async (req: Request, res: Response) => {
     throw new BadRequestException("Category already exists");
   }
 
+  // Accept image from file upload OR from imageUrl string in body
+  let image = "";
+  if (req.file) {
+    image = await uploadToCloudinary(req.file as Express.Multer.File);
+  } else if (imageUrl && typeof imageUrl === "string" && imageUrl.startsWith("http")) {
+    image = imageUrl;
+  }
+
   const category = await Category.create({
     name,
     slug,
     parent: parent || null,
     ordering: ordering || 0,
+    image,
   });
 
   return res.status(201).json({
@@ -74,6 +96,11 @@ export const updateCategory = async (req: Request, res: Response) => {
 
   const slug = name ? toSlug(name) : category.slug;
 
+  let imageUrl = category.image;
+  if (req.file) {
+    imageUrl = await uploadToCloudinary(req.file as Express.Multer.File);
+  }
+
   const updated = await Category.findByIdAndUpdate(
     req.params.id,
     {
@@ -81,6 +108,7 @@ export const updateCategory = async (req: Request, res: Response) => {
       slug,
       parent: parent ?? category.parent,
       ordering: ordering ?? category.ordering,
+      image: imageUrl,
     },
     { new: true }
   );
