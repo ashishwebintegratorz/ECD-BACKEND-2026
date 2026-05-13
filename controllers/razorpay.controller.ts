@@ -24,20 +24,19 @@ export const createRazorpayOrder =
   ) => {
 
     try {
-
+      if (!req.body) {
+        return res.status(400).json({
+          success: false,
+          message: "Request body is missing",
+        });
+      }
       const { amount } = req.body;
 
       if (!amount) {
-
         return res.status(400).json({
-
           success: false,
-
-          message:
-            "Amount is required",
-
+          message: "Amount is required",
         });
-
       }
 
       const options = {
@@ -63,18 +62,12 @@ export const createRazorpayOrder =
       });
 
     } catch (error) {
-
-      console.log(error);
-
+      console.error("RAZORPAY ERROR:", error);
       res.status(500).json({
-
         success: false,
-
-        message:
-          "Failed to create Razorpay order",
-
+        message: "Failed to create Razorpay order",
+        error: error instanceof Error ? error.message : String(error),
       });
-
     }
 
   };

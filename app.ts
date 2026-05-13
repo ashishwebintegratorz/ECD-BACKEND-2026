@@ -24,6 +24,7 @@ import refundRoutes from "./routes/refund.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import couponRoutes from "./routes/coupon.routes.js";
 import groceryRoutes from "./routes/grocery.route.js";
+import { razorpayWebhook } from "./controllers/razorpay.controller.js";
 
 const app = express();
 const BASE_PATH = config.BASE_PATH;
@@ -49,7 +50,11 @@ const generalLimiter = rateLimit({
 });
 
 // 🟢 Razorpay Webhook (MUST be before express.json() for raw body verification)
-app.use(`${BASE_PATH}/razorpay`, razorpayRoutes);
+app.post(
+  `${BASE_PATH}/razorpay/webhook`,
+  express.raw({ type: "application/json" }),
+  razorpayWebhook
+);
 
 // Body
 app.use(express.json());
@@ -96,7 +101,7 @@ app.use(`${BASE_PATH}/notifications`, notificationRoutes);
 app.use(`${BASE_PATH}/coupons`, couponRoutes);
 app.use(`${BASE_PATH}/grocery`, groceryRoutes);
 
-// app.use(`${BASE_PATH}/razorpay`, razorpayRoutes); // Moved up
+app.use(`${BASE_PATH}/razorpay`, razorpayRoutes);
 
 // error handler (last)
 app.use(errorHandler);

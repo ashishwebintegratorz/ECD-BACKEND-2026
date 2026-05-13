@@ -26,9 +26,12 @@ import {
 const router = Router();
 
 // ─── Customer ─────────────────────────────────────────────────────────────────
+// Static routes FIRST to avoid conflict with /:orderId
+router.get("/me", jwtAuth, asyncHandler(getMyOrders));
+router.get("/my-orders", jwtAuth, asyncHandler(getMyOrders));
 router.post("/create", jwtAuth, asyncHandler(createOrder));
 router.post("/verify-payment", jwtAuth, asyncHandler(verifyPayment));
-router.get("/my-orders", jwtAuth, asyncHandler(getMyOrders));
+
 router.put("/cancel/:orderId", jwtAuth, asyncHandler(cancelOrder));
 router.get("/delivery-otp/:orderId", jwtAuth, asyncHandler(getDeliveryOtp));
 router.get("/:orderId", jwtAuth, asyncHandler(getOrderById));
