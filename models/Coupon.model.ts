@@ -2,6 +2,8 @@ import { Schema, model, Document, Types } from "mongoose";
 
 export interface ICoupon extends Document {
   code: string;
+  heading?: string;
+  subHeading?: string;
   description?: string;
   discountType: "percent" | "fixed";
   discountValue: number;
@@ -21,6 +23,8 @@ export interface ICoupon extends Document {
 const CouponSchema = new Schema<ICoupon>(
   {
     code: { type: String, required: true, unique: true, index: true },
+    heading: { type: String },
+    subHeading: { type: String },
     description: { type: String },
     discountType: { type: String, enum: ["percent", "fixed"], required: true },
     discountValue: { type: Number, required: true },

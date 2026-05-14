@@ -17,10 +17,28 @@ export const validateCouponEndpoint = async (req: Request, res: Response) => {
 
     if (!result.ok) return res.status(400).json({ message: result.message });
 
+    const coupon = await Coupon.findOne({ code: code.toUpperCase().trim() });
+    
+    // ── Pre-calculate GST (5%) and Total for frontend display ───────────────
+    const discountAmount = result.discountAmount || 0;
+    const taxableAmount = Math.max(0, Number(orderAmount) - discountAmount);
+    const gst = Math.round(taxableAmount * 0.05);
+    const totalWithGst = taxableAmount + gst;
+
     return res.json({
         valid: true,
-        discountAmount: result.discountAmount,
-        message: `Coupon applied! You save ₹${result.discountAmount}`,
+        discountAmount,
+        gst,
+        totalWithGst,
+        message: `Coupon applied! You save ₹${discountAmount}`,
+        coupon: {
+            code: coupon?.code,
+            heading: coupon?.heading,
+            subHeading: coupon?.subHeading,
+            description: coupon?.description,
+            discountType: coupon?.discountType,
+            discountValue: coupon?.discountValue,
+        }
     });
 };
 
@@ -34,6 +52,12 @@ export const getActiveCoupons = async (req: Request, res: Response) => {
     const query: any = {
         active: true,
         $or: [{ validTo: { $gte: now } }, { validTo: null }],
+        $expr: {
+            $or: [
+                { $eq: ["$usageLimit", null] },
+                { $lt: ["$usedCount", "$usageLimit"] }
+            ]
+        }
     };
 
     // Return global coupons + store-specific coupons for this store
@@ -46,7 +70,7 @@ export const getActiveCoupons = async (req: Request, res: Response) => {
     }
 
     const coupons = await Coupon.find(query)
-        .select("code description discountType discountValue minOrderValue maxDiscountValue validTo")
+        .select("code heading subHeading description discountType discountValue minOrderValue maxDiscountValue validTo usageLimit usedCount")
         .sort({ createdAt: -1 });
 
     return res.json({ coupons });
@@ -57,7 +81,7 @@ export const getActiveCoupons = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const createCoupon = async (req: Request, res: Response) => {
     const {
-        code, description, discountType, discountValue,
+        code, heading, subHeading, description, discountType, discountValue,
         minOrderValue, maxDiscountValue, usageLimit,
         perUserLimit, validFrom, validTo, restaurantId,
     } = req.body;
@@ -71,6 +95,8 @@ export const createCoupon = async (req: Request, res: Response) => {
 
     const coupon = await Coupon.create({
         code: code.toUpperCase().trim(),
+        heading,
+        subHeading,
         description,
         discountType,
         discountValue: Number(discountValue),
@@ -94,10 +120,12 @@ export const updateCoupon = async (req: Request, res: Response) => {
     if (!coupon) throw new NotFoundException("Coupon not found");
 
     const {
-        description, discountType, discountValue, minOrderValue,
+        heading, subHeading, description, discountType, discountValue, minOrderValue,
         maxDiscountValue, usageLimit, perUserLimit, validFrom, validTo, active,
     } = req.body;
 
+    if (heading !== undefined) coupon.heading = heading;
+    if (subHeading !== undefined) coupon.subHeading = subHeading;
     if (description !== undefined) coupon.description = description;
     if (discountType !== undefined) coupon.discountType = discountType;
     if (discountValue !== undefined) coupon.discountValue = Number(discountValue);

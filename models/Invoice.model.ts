@@ -15,7 +15,9 @@ export interface IInvoice extends Document {
     items: IInvoiceItem[];
     totalAmount: number;          // items total before delivery
     deliveryCharge: number;       // delivery fee
-    amount: number;               // final payable (totalAmount + deliveryCharge)
+    gst: number;
+    totalDiscount: number;
+    amount: number;               // final payable (totalAmount + deliveryCharge + gst - totalDiscount)
     paymentMethod?: string;
     date: Date;
     status: "paid" | "unpaid";
@@ -42,6 +44,8 @@ const InvoiceSchema = new Schema<IInvoice>(
         items: { type: [InvoiceItemSchema], default: [] },
         totalAmount: { type: Number, required: true },
         deliveryCharge: { type: Number, required: true, default: 0 },
+        gst: { type: Number, required: true, default: 0 },
+        totalDiscount: { type: Number, required: true, default: 0 },
         amount: { type: Number, required: true },
         paymentMethod: { type: String },
         date: { type: Date, default: Date.now },

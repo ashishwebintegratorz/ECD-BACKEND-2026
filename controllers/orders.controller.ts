@@ -25,6 +25,9 @@ import {
 } from "../socket/orderSocket.js";
 import Address from "../models/Address.model.js";
 import { calculateDeliveryCharge, isWithinIndore } from "../utils/delivery.utils.js";
+import Restaurant from "../models/Restaurant.model.js";
+import DriverLocation from "../models/DriverLocation.model.js";
+import { getRouteFromORS } from "../services/tracking.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: generate a 4-digit numeric OTP
@@ -108,21 +111,32 @@ export const createOrder = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Minimum order amount is ₹100" });
 
   const deliveryCharge = calculateDeliveryCharge(totalAmount);
-  let payableAmount = totalAmount + deliveryCharge;
+  
+  // ── Fetch store to check type (Restaurant/Grocery) for GST ───────────────
+  const store = await Restaurant.findById(effectiveRestaurantId);
+  const isRestaurant = store?.storeType === "restaurant";
 
   // ── Coupon validation ─────────────────────────────────────────────────────
+  let totalDiscount = 0;
   let appliedCoupon: { couponId: string; code: string; discountAmount: number } | undefined;
+  
   if (couponCode) {
     const couponResult = await validateCoupon(couponCode, userId, effectiveRestaurantId, totalAmount);
     if (!couponResult.ok)
       return res.status(400).json({ message: couponResult.message });
+    
+    totalDiscount = couponResult.discountAmount!;
     appliedCoupon = {
       couponId: couponResult.couponId!,
       code: couponCode.toUpperCase().trim(),
-      discountAmount: couponResult.discountAmount!,
+      discountAmount: totalDiscount,
     };
-    payableAmount = Math.max(0, payableAmount - appliedCoupon.discountAmount);
   }
+
+  // ── GST Calculation (5% for Restaurants) ──────────────────────────────────
+  const taxableAmount = Math.max(0, totalAmount - totalDiscount);
+  const gst = isRestaurant ? Math.round(taxableAmount * 0.05) : 0;
+  const payableAmount = taxableAmount + deliveryCharge + gst;
 
   console.log("Creating Order with data:", JSON.stringify({
     orderNumber: `ORD-${Date.now()}`,
@@ -150,6 +164,8 @@ export const createOrder = async (req: Request, res: Response) => {
       })),
       totalAmount,
       deliveryCharge,
+      gst,
+      totalDiscount,
       payableAmount,
       address: addressSnapshot,
       status: "pending",
@@ -175,9 +191,6 @@ export const createOrder = async (req: Request, res: Response) => {
     });
     await confirmOrderLogic(order._id.toString());
 
-    // Increment coupon usage if applied
-    if (appliedCoupon) await incrementCouponUsage(appliedCoupon.couponId);
-
     // Auto-generate delivery OTP for customer
     const deliveryOtp = generateDeliveryOtp();
     await User.findByIdAndUpdate(userId, { deliveryOtp });
@@ -185,7 +198,17 @@ export const createOrder = async (req: Request, res: Response) => {
     const updatedOrder = await Order.findById(order._id);
     // Push: order placed
     notifyOrderPlaced(userId, order.orderNumber).catch(() => { });
-    return res.json({ order: updatedOrder, cod: true });
+    return res.json({ 
+      order: updatedOrder, 
+      cod: true,
+      summary: {
+        totalAmount,
+        deliveryCharge,
+        gst,
+        totalDiscount,
+        payableAmount
+      }
+    });
   }
 
   // Razorpay flow
@@ -209,6 +232,8 @@ export const createOrder = async (req: Request, res: Response) => {
     razorpayOrderId: razorpayOrder.id,
     amount: payableAmount,
     deliveryCharge,
+    gst,
+    totalDiscount,
     currency: "INR",
   });
 };
@@ -260,6 +285,7 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Order must be in preparing state" });
 
   order.status = "ready";
+  order.pickupOtp = generateDeliveryOtp(); // Reuse the same 4-digit helper
   await order.save();
 
   // Push: order ready
@@ -337,6 +363,15 @@ export const cancelOrder = async (req: Request, res: Response) => {
   if (!["pending", "preparing"].includes(order.status))
     return res.status(400).json({ message: "Order cannot be cancelled now" });
 
+  // Enforce 5-minute cancellation window
+  const now = new Date();
+  const orderCreatedAt = new Date((order as any).createdAt);
+  const diffInMinutes = (now.getTime() - orderCreatedAt.getTime()) / (1000 * 60);
+  
+  if (diffInMinutes > 5) {
+    return res.status(400).json({ message: "Cancellation window (5 minutes) has expired" });
+  }
+
   const cancelReason = reason?.trim() || "Cancelled by customer";
   order.status = "cancelled";
   order.cancelledBy = "customer";
@@ -346,14 +381,17 @@ export const cancelOrder = async (req: Request, res: Response) => {
 
   await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
 
-  // Create refund record — processed within 24 hours via cron
+  const isPriority = diffInMinutes <= 5;
+
+  // Create refund record
   await createRefundRecord(
     orderId,
     order.orderNumber,
     userId,
     order.payableAmount,
     cancelReason,
-    "customer"
+    "customer",
+    isPriority
   );
 
   // Push: notify customer of cancellation + refund
@@ -485,7 +523,8 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
   const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
   if (!order) return res.status(404).json({ message: "Order not found or not assigned to you" });
 
-  // OTP check on delivery
+  // OTP check on delivery (REMOVED per instructions)
+  /*
   if (status === "delivered") {
     const customer = await User.findById(order.customer);
     if (!customer) return res.status(404).json({ message: "Customer not found" });
@@ -494,6 +533,7 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
     if (String(otp) !== String(customer.deliveryOtp))
       return res.status(400).json({ message: "Invalid delivery OTP" });
   }
+  */
 
   order.deliveryStatus = status as any;
   if (status === "delivered") order.status = "ready";
@@ -586,9 +626,6 @@ export const getMyOrders = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // CUSTOMER: Get Order Tracking Detail (Map + Progress)
 // ─────────────────────────────────────────────────────────────────────────────
-import DriverLocation from "../models/DriverLocation.model.js";
-import { getRouteFromORS } from "../services/tracking.service.js";
-
 export const getOrderTracking = async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const userId = req.user.id;
@@ -600,51 +637,45 @@ export const getOrderTracking = async (req: Request, res: Response) => {
 
   if (!order) return res.status(404).json({ message: "Order not found" });
 
-  let driverLocation = null;
-  let route = null;
-
-  // 1. Get driver location if assigned
-  if (order.assignedDriver) {
-    driverLocation = await DriverLocation.findOne({ driver: (order.assignedDriver as any)._id })
-      .sort({ updatedAt: -1 })
-      .lean();
-  }
-
-  // 2. Fetch Route from ORS
-  // Logic: 
-  // - If out_for_delivery: Route from Driver to Customer
-  // - If preparing/ready: Route from Restaurant to Customer
-  const customerLoc = order.address?.location?.coordinates; // [lng, lat]
-  
-  if (customerLoc && customerLoc.length === 2) {
-    let startLoc = null;
-
-    if (order.deliveryStatus === "out_for_delivery" && driverLocation) {
-      startLoc = driverLocation.location.coordinates;
-    } else if (["preparing", "ready"].includes(order.status) && (order.store as any).location) {
-      startLoc = (order.store as any).location.coordinates;
-    }
-
-    if (startLoc && startLoc.length === 2) {
-      route = await getRouteFromORS(
-        { lng: startLoc[0], lat: startLoc[1] },
-        { lng: customerLoc[0], lat: customerLoc[1] }
-      );
-    }
-  }
-
-  // Calculate current step for frontend progress bar (0-3)
+  // 1. Calculate current step and timeline
   let currentStep = 0; // Order Placed
-  if (["preparing", "ready"].includes(order.status)) currentStep = 1; // Preparing
-  if (order.deliveryStatus === "out_for_delivery") currentStep = 2; // On the way
-  if (order.deliveryStatus === "delivered") currentStep = 3; // Delivered
+  if (order.status === "preparing") currentStep = 1;
+  if (order.status === "ready" && order.deliveryStatus !== "out_for_delivery") currentStep = 1;
+  if (order.deliveryStatus === "out_for_delivery") currentStep = 2;
+  if (order.deliveryStatus === "delivered") currentStep = 3;
+
+  const timeline = [
+    { status: "Order Placed", completed: true, time: order.createdAt },
+    { status: "Preparing", completed: currentStep >= 1, time: currentStep >= 1 ? (order as any).updatedAt : null },
+    { status: "On the Way", completed: currentStep >= 2, time: currentStep >= 2 ? (order as any).updatedAt : null },
+    { status: "Delivered", completed: currentStep >= 3, time: currentStep >= 3 ? (order as any).updatedAt : null },
+  ];
+
+  // 2. Cancellation window (5 minutes)
+  const now = new Date();
+  const orderCreatedAt = new Date((order as any).createdAt);
+  const diffInMinutes = (now.getTime() - orderCreatedAt.getTime()) / (1000 * 60);
+  const canCancel = diffInMinutes <= 5 && ["pending", "preparing"].includes(order.status);
+
+  // 3. Rider details logic (only show when on the way or delivered)
+  const showRider = ["out_for_delivery", "delivered"].includes(order.deliveryStatus);
 
   return res.json({
     success: true,
-    order,
-    driverLocation,
-    route, // Polyline + distance + duration
+    order: {
+      _id: order._id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      deliveryStatus: order.deliveryStatus,
+      payableAmount: order.payableAmount,
+      itemsCount: order.items.length,
+      store: order.store,
+      assignedDriver: showRider ? order.assignedDriver : null,
+    },
     currentStep,
+    timeline,
+    canCancel,
+    remainingCancellationTime: Math.max(0, 5 - diffInMinutes),
   });
 };
 

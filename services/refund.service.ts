@@ -14,7 +14,8 @@ export const createRefundRecord = async (
     customerId: string,
     amount: number,
     reason: string,
-    initiatedBy: "customer" | "restaurant" | "admin"
+    initiatedBy: "customer" | "restaurant" | "admin",
+    isPriority: boolean = false
 ) => {
     // Find the payment transaction to get payment method + Razorpay ID
     const transaction = await PaymentTransaction.findOne({
@@ -38,8 +39,9 @@ export const createRefundRecord = async (
         initiatedBy,
         paymentMethod: transaction.provider,
         razorpayPaymentId: transaction.providerPaymentId,
-        status: isCod ? "completed" : "pending", // COD = no refund needed
-        scheduledAt: new Date(),                       // process immediately via cron
+        status: isCod ? "completed" : "pending", 
+        isPriority,
+        scheduledAt: new Date(),                       
         processedAt: isCod ? new Date() : undefined,
     });
 

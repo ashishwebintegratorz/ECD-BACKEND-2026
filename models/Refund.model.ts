@@ -14,6 +14,7 @@ export interface IRefund extends Document {
     razorpayPaymentId?: string;           // original payment ID for Razorpay refunds
     razorpayRefundId?: string;           // returned by Razorpay after refund
     status: RefundStatus;
+    isPriority: boolean;            // true if cancelled within 5 mins
     scheduledAt: Date;             // when refund should be processed
     processedAt?: Date;
     failureReason?: string;
@@ -33,6 +34,7 @@ const RefundSchema = new Schema<IRefund>(
         razorpayPaymentId: { type: String },
         razorpayRefundId: { type: String },
         status: { type: String, enum: ["pending", "processing", "completed", "failed"], default: "pending", index: true },
+        isPriority: { type: Boolean, default: false },
         scheduledAt: { type: Date, required: true },
         processedAt: { type: Date },
         failureReason: { type: String },

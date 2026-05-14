@@ -18,9 +18,9 @@ router.post("/validate", jwtAuth, asyncHandler(validateCouponEndpoint));
 router.get("/active", jwtAuth, asyncHandler(getActiveCoupons));
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
-router.get("/all", jwtAuth, requireRole("admin"), asyncHandler(getAllCoupons));
-router.post("/", jwtAuth, requireRole("admin"), asyncHandler(createCoupon));
-router.put("/:id", jwtAuth, requireRole("admin"), asyncHandler(updateCoupon));
-router.delete("/:id", jwtAuth, requireRole("admin"), asyncHandler(deleteCoupon));
+router.get("/admin/all", jwtAuth, requireRole("admin"), asyncHandler(getAllCoupons));
+router.post("/admin/create", jwtAuth, requireRole("admin"), asyncHandler(createCoupon));
+router.put("/admin/update/:id", jwtAuth, requireRole("admin"), asyncHandler(updateCoupon));
+router.delete("/admin/delete/:id", jwtAuth, requireRole("admin"), asyncHandler(deleteCoupon));
 
 export default router;

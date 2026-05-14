@@ -43,6 +43,8 @@ export interface IOrder extends Document {
   items: IOrderItem[];
   totalAmount: number;
   deliveryCharge: number;
+  gst: number;
+  totalDiscount: number;
   payableAmount: number;
   address: Types.ObjectId | any;
   status: OrderStatus;
@@ -54,6 +56,7 @@ export interface IOrder extends Document {
   cancelledBy?: CancelledBy;
   cancellationLog: ICancellationLog[];
   coupon?: { couponId: Types.ObjectId; code: string; discountAmount: number }; // applied coupon
+  pickupOtp?: string;            // OTP given by restaurant to rider for pickup
   meta?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
@@ -89,6 +92,8 @@ const OrderSchema = new Schema<IOrder>(
     items: { type: [OrderItemSchema], required: true },
     totalAmount: { type: Number, required: true },
     deliveryCharge: { type: Number, required: true, default: 0 },
+    gst: { type: Number, required: true, default: 0 },
+    totalDiscount: { type: Number, required: true, default: 0 },
     payableAmount: { type: Number, required: true },
     address: { type: Schema.Types.Mixed, required: true },
     status: { type: String, default: "pending", index: true },
@@ -104,6 +109,7 @@ const OrderSchema = new Schema<IOrder>(
       code: { type: String },
       discountAmount: { type: Number },
     },
+    pickupOtp: { type: String },
     meta: { type: Schema.Types.Mixed },
   },
   { timestamps: true }

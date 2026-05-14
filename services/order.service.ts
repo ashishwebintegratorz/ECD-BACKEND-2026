@@ -6,6 +6,7 @@ import Ledger from "../models/Ledger.model.js";
 import PaymentTransaction from "../models/PaymentTransaction.model.js";
 import Restaurant from "../models/Restaurant.model.js";
 import { emitNewOrderToRestaurant } from "../socket/orderSocket.js";
+import { incrementCouponUsage } from "./coupon.service.js";
 
 const PLATFORM_FEE_PERCENT = 0.10;
 const PLATFORM_REF_ID = process.env.PLATFORM_REF_ID ?? "000000000000000000000001";
@@ -102,6 +103,11 @@ export const confirmOrderLogic = async (orderId: string) => {
         });
     }
 
+    // ── Coupon Usage Tracking ────────────────────────────────────────────────
+    if (order.coupon && order.coupon.couponId) {
+        await incrementCouponUsage(order.coupon.couponId.toString());
+    }
+
     // 4. Clear cart
     await Cart.updateOne({ user: order.customer }, { items: [] });
 
@@ -123,6 +129,8 @@ export const confirmOrderLogic = async (orderId: string) => {
             })),
             totalAmount: order.totalAmount,
             deliveryCharge: order.deliveryCharge ?? 0,
+            gst: order.gst || 0,
+            totalDiscount: order.totalDiscount || 0,
             amount: order.payableAmount,
             paymentMethod: transaction?.provider ?? "unknown",
             status: "paid",
