@@ -59,7 +59,7 @@ export async function createAndSendOtp(
 
   });
 
-  /*try {
+  try {
 
     const apiKey =
       process.env.TWO_FACTOR_API_KEY;
@@ -76,7 +76,7 @@ export async function createAndSendOtp(
 
     console.log(error);
 
-  }*/
+  }
 
   return { ok: true };
 
