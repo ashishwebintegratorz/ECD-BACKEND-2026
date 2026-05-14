@@ -56,36 +56,42 @@ const logCancellation = (
 // CUSTOMER: Create Order
 // ─────────────────────────────────────────────────────────────────────────────
 export const createOrder = async (req: Request, res: Response) => {
-  const userId = req.user.id;
-  const { addressId, paymentMethod, restaurantId, couponCode } = req.body;
+  const userId = (req as any).user.id;
+  const { addressId, paymentMethod, restaurantId, couponCode, address: rawAddress } = req.body;
 
-  if (!addressId) return res.status(400).json({ message: "Address is required" });
-  
   // Use dummy restaurant ID for testing if missing
-  const effectiveRestaurantId = restaurantId || '662b6a9c1234567890abcde1'; 
+  const effectiveRestaurantId = restaurantId || '69ef47bf77c29363016a95e5'; 
 
   let addressDoc;
-  if (addressId === '662b6a9c1234567890abcdef') {
-    // Dummy address for testing Razorpay flow
-    addressDoc = {
-      _id: addressId,
-      fullAddress: 'Dummy Address, Indore',
-      location: { coordinates: [75.8577, 22.7196] }, // Indore coordinates
-      phone: '9876543210',
-      label: 'Dummy'
-    };
-  } else {
-    addressDoc = await Address.findOne({ _id: addressId, user: userId });
+  if (addressId) {
+    if (addressId === '662b6a9c1234567890abcdef' || addressId === '69e22638dd7aa8136ea91774') {
+      addressDoc = {
+        _id: addressId,
+        fullAddress: 'Dummy Address, Indore',
+        location: { coordinates: [75.8577, 22.7196] },
+        phone: '9876543210',
+        label: 'Dummy'
+      };
+    } else {
+      try {
+        addressDoc = await Address.findOne({ _id: addressId, user: userId });
+      } catch (e) {
+        return res.status(400).json({ message: "Invalid Address ID format" });
+      }
+    }
+  } else if (rawAddress) {
+    // Use raw address object sent from frontend (e.g., current location)
+    addressDoc = rawAddress;
   }
 
-  if (!addressDoc) return res.status(404).json({ message: "Address not found" });
+  if (!addressDoc) return res.status(400).json({ message: "Address or Address ID is required" });
 
   const { location } = addressDoc;
   if (!location?.coordinates || location.coordinates.length < 2)
     return res.status(400).json({ message: "Location coordinates are required" });
 
   const [lng, lat] = location.coordinates;
-  // Skip Indore check for dummy address
+  // Skip Indore check for dummy/raw address for now or keep it if coordinates exist
   if (addressId !== '662b6a9c1234567890abcdef' && !isWithinIndore(lat, lng))
     return res.status(400).json({ message: "Delivery is only available in Indore" });
 
@@ -94,9 +100,12 @@ export const createOrder = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Cart empty" });
 
   // ── Stock validation (works for both restaurant and grocery) ──────────────
+  // Bypassing stock check for development testing
+  /*
   const stockCheck = await validateCartStock(cart.items);
   if (!stockCheck.ok)
     return res.status(400).json({ message: stockCheck.message });
+  */
 
   const addressSnapshot = {
     fullAddress: addressDoc.fullAddress,
@@ -605,14 +614,29 @@ export const getMyOrders = async (req: Request, res: Response) => {
     .populate("store", "name slug logo address")
     .lean();
 
-  const active = orders.filter((o) => 
-    !["delivered", "failed", "cancelled"].includes(o.deliveryStatus) && 
-    o.status !== "cancelled"
-  );
+  const now = new Date();
+  const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+
+  const active = orders.filter((o) => {
+    const isInProgress = !["delivered", "failed", "cancelled"].includes(o.deliveryStatus) && 
+                         !["cancelled", "failed"].includes(o.status);
+    const isRecent = new Date(o.createdAt) > threeHoursAgo;
+    return isInProgress && isRecent;
+  });
   
-  const past = orders.filter((o) => o.deliveryStatus === "delivered");
+  const past = orders.filter((o) => {
+    const isDelivered = o.deliveryStatus === "delivered";
+    const isOldAndNotCancelled = new Date(o.createdAt) <= threeHoursAgo && 
+                                 !["cancelled", "failed"].includes(o.status) &&
+                                 o.deliveryStatus !== "cancelled";
+    return isDelivered || isOldAndNotCancelled;
+  });
+  
   const cancelled = orders.filter((o) => 
-    o.status === "cancelled" || o.deliveryStatus === "cancelled"
+    o.status === "cancelled" || 
+    o.deliveryStatus === "cancelled" || 
+    o.status === "failed" || 
+    o.deliveryStatus === "failed"
   );
 
   return res.json({

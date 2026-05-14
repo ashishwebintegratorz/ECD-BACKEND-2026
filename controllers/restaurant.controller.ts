@@ -299,7 +299,13 @@ export const getRestaurantMenu = async (req: Request, res: Response) => {
     const foodType = req.query.foodType as string | undefined;
 
     const restaurant = await Restaurant.findOne(
-        { slug, isActive: true },
+        { 
+            $or: [
+                { slug }, 
+                ...(Types.ObjectId.isValid(slug) ? [{ _id: new Types.ObjectId(slug) }] : [])
+            ],
+            isActive: true 
+        },
         { menu: 1 } // projection — only fetch menu field
     ).lean();
 
