@@ -59,15 +59,24 @@ export async function createAndSendOtp(
 
   });
 
-  // Commented out 2factor service - OTP is logged to terminal above for development
-  // try {
-  //   const apiKey = process.env.TWO_FACTOR_API_KEY;
-  //   const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKART`;
-  //   const response = await axios.get(url);
-  //   console.log(response.data);
-  // } catch (error) {
-  //   console.log(error);
-  // }
+  /* try {
+ 
+     const apiKey =
+       process.env.TWO_FACTOR_API_KEY;
+ 
+     const url =
+       `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKART`;
+ 
+     const response =
+       await axios.get(url);
+ 
+     console.log(response.data);
+ 
+   } catch (error) {
+ 
+     console.log(error);
+ 
+   }*/
 
   return { ok: true };
 

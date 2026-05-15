@@ -53,6 +53,8 @@ export const createRazorpayOrder =
       const order =
         await razorpay.orders.create(options);
 
+      console.log("RAZORPAY ORDER CREATED:", JSON.stringify(order, null, 2));
+
       res.status(200).json({
 
         success: true,

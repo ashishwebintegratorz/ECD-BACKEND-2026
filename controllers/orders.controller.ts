@@ -228,6 +228,8 @@ export const createOrder = async (req: Request, res: Response) => {
     payment_capture: true,
   });
 
+  console.log("RAZORPAY ORDER CREATED (Order Flow):", JSON.stringify(razorpayOrder, null, 2));
+
   await PaymentTransaction.create({
     order: order._id,
     provider: "razorpay",
@@ -251,6 +253,9 @@ export const createOrder = async (req: Request, res: Response) => {
 // CUSTOMER: Verify Razorpay Payment
 // ─────────────────────────────────────────────────────────────────────────────
 export const verifyPayment = async (req: Request, res: Response) => {
+  console.log("=========== VERIFY API HIT ===========");
+  console.log("REQUEST BODY:", JSON.stringify(req.body, null, 2));
+
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
   const expectedSignature = crypto
@@ -258,8 +263,13 @@ export const verifyPayment = async (req: Request, res: Response) => {
     .update(`${razorpay_order_id}|${razorpay_payment_id}`)
     .digest("hex");
 
-  if (expectedSignature !== razorpay_signature)
+  console.log("EXPECTED SIGNATURE:", expectedSignature);
+  console.log("RECEIVED SIGNATURE:", razorpay_signature);
+
+  if (expectedSignature !== razorpay_signature) {
+    console.error("SIGNATURE MISMATCH!");
     return res.status(400).json({ message: "Invalid payment signature" });
+  }
 
   const transaction = await PaymentTransaction.findOne({ providerPaymentId: razorpay_order_id });
   if (!transaction)

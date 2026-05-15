@@ -18,7 +18,7 @@ export async function createRazorpayOrder(
 
     const options = {
 
-        amount: amount * 100,
+        amount: Math.round(amount * 100),
 
         currency: "INR",
 
