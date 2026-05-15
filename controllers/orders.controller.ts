@@ -416,7 +416,6 @@ export const cancelOrder = async (req: Request, res: Response) => {
   // Push: notify customer of cancellation + refund
   notifyOrderCancelled(userId, order.orderNumber).catch(() => { });
   notifyRefundInitiated(userId, order.payableAmount, order.orderNumber).catch(() => { });
-
   emitOrderStatusUpdate(orderId, {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
@@ -425,6 +424,34 @@ export const cancelOrder = async (req: Request, res: Response) => {
   });
 
   return res.json({ success: true, order });
+};
+
+export const failOrder = async (req: Request, res: Response) => {
+  const userId = req.user.id;
+  const { orderId } = req.params;
+  const { reason } = req.body;
+
+  const order = await Order.findOne({ _id: orderId, customer: userId });
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  if (order.status !== "pending")
+    return res.status(400).json({ message: "Only pending orders can be marked as failed" });
+
+  order.status = "failed";
+  order.cancellationReason = reason || "Payment failed";
+  logCancellation(order, "customer", userId, reason || "Payment failed");
+  await order.save();
+
+  await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
+
+  emitOrderStatusUpdate(orderId, {
+    status: order.status,
+    deliveryStatus: order.deliveryStatus,
+    message: "Payment failed",
+    updatedAt: (order as any).updatedAt,
+  });
+
+  return res.json({ success: true, message: "Order marked as failed", order });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -636,10 +663,10 @@ export const getMyOrders = async (req: Request, res: Response) => {
   
   const past = orders.filter((o) => {
     const isDelivered = o.deliveryStatus === "delivered";
-    const isOldAndNotCancelled = new Date(o.createdAt) <= threeHoursAgo && 
-                                 !["cancelled", "failed"].includes(o.status) &&
-                                 o.deliveryStatus !== "cancelled";
-    return isDelivered || isOldAndNotCancelled;
+    const isCancelledOrFailed = ["cancelled", "failed"].includes(o.status) || 
+                                ["cancelled", "failed"].includes(o.deliveryStatus);
+    const isOld = new Date(o.createdAt) <= threeHoursAgo;
+    return isDelivered || isCancelledOrFailed || isOld;
   });
   
   const cancelled = orders.filter((o) => 

@@ -8,6 +8,7 @@ import {
   getMyOrders,
   getOrderById,
   cancelOrder,
+  failOrder,
   updateOrderStatus,
   getAllOrders,
   assignOrderToDriver,
@@ -28,6 +29,8 @@ const router = Router();
 
 // ─── Customer ─────────────────────────────────────────────────────────────────
 // Static routes FIRST to avoid conflict with /:orderId
+router.post("/:orderId/cancel", jwtAuth, asyncHandler(cancelOrder));
+router.post("/:orderId/fail", jwtAuth, asyncHandler(failOrder));
 router.get("/me", jwtAuth, asyncHandler(getMyOrders));
 router.get("/my-orders", jwtAuth, asyncHandler(getMyOrders));
 router.post("/create", jwtAuth, asyncHandler(createOrder));
