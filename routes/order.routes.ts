@@ -2,6 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import { jwtAuth } from "../middlewares/jwtAuth.middleware.js";
 import { requireRole } from "../middlewares/role.middleware.js";
+import { checkOnboarding } from "../middlewares/checkOnboarding.middleware.js";
 import {
   createOrder,
   verifyPayment,
@@ -50,10 +51,10 @@ router.patch("/restaurant/ready/:orderId", jwtAuth, requireRole("admin"), asyncH
 router.patch("/restaurant/cancel/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantCancelOrder));
 
 // ─── Driver ───────────────────────────────────────────────────────────────────
-router.get("/driver/my-orders", jwtAuth, requireRole("driver"), asyncHandler(getDriverOrders));
-router.patch("/driver/accept/:orderId", jwtAuth, requireRole("driver"), asyncHandler(driverAcceptOrder));
-router.patch("/driver/decline/:orderId", jwtAuth, requireRole("driver"), asyncHandler(driverDeclineOrder));
-router.put("/driver/update-status/:orderId", jwtAuth, requireRole("driver"), asyncHandler(updateOrderByDriver));
+router.get("/driver/my-orders", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(getDriverOrders));
+router.patch("/driver/accept/:orderId", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(driverAcceptOrder));
+router.patch("/driver/decline/:orderId", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(driverDeclineOrder));
+router.put("/driver/update-status/:orderId", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(updateOrderByDriver));
 
 // ─── Admin: Cancellation Tracking ────────────────────────────────────────────
 router.get("/cancellations/all", jwtAuth, requireRole("admin"), asyncHandler(getAllCancellations));

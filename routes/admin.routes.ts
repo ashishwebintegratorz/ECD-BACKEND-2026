@@ -12,6 +12,7 @@ import {
     getStoreStats,
     getLiveOrders,
 } from "../controllers/admin.controller.js";
+import { getAllWithdrawalRequests, processWithdrawal } from "../controllers/driverWallet.controller.js";
 
 const router = Router();
 
@@ -30,5 +31,9 @@ router.get("/users", asyncHandler(getAllUsers));
 router.get("/users/:id", asyncHandler(getUserById));
 router.patch("/users/:id/role", asyncHandler(updateUserRole));
 router.patch("/users/:id/block", asyncHandler(toggleUserBlock));
+
+// ─── Rider Payouts ───────────────────────────────────────────────────────────
+router.get("/withdrawals", asyncHandler(getAllWithdrawalRequests));
+router.patch("/withdrawals/process", asyncHandler(processWithdrawal));
 
 export default router;

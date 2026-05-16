@@ -32,6 +32,7 @@ export interface IRestaurant extends Document {
     adminRating: number;
     featured: boolean;
     orderCount: number;
+    paymentQr?: string;            // QR code image URL for payments
     createdAt: Date;
     updatedAt: Date;
 }
@@ -76,6 +77,7 @@ const RestaurantSchema = new Schema<IRestaurant>(
         adminRating: { type: Number, default: 0, min: 0, max: 5 },
         featured: { type: Boolean, default: false, index: true },
         orderCount: { type: Number, default: 0 },
+        paymentQr: { type: String },
     },
     { timestamps: true }
 );

@@ -124,3 +124,76 @@ export const getAllDriverLocations = asyncHandler(async (_req: Request, res: Res
 
     return res.json({ locations });
 });
+
+/**
+ * Driver: Get current profile details
+ */
+export const getDriverProfile = asyncHandler(async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const driver = await UserModel.findById(user._id).select("-pinHash");
+    if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+    return res.json(driver);
+});
+
+/**
+ * Driver: Update profile / documents
+ * Handles multipart form data for document uploads
+ */
+export const updateDriverProfile = asyncHandler(async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const { name, email } = req.body;
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+    const updateData: any = {};
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
+
+    // Handle document paths (in a real app, these would be S3/Cloudinary URLs)
+    // For now, we'll store mock paths based on originalname
+    if (files) {
+        if (!updateData.documents) updateData.documents = {};
+        
+        const docMapping: any = {
+            aadhar_front: "aadharFront",
+            aadhar_back: "aadharBack",
+            pan_card: "panCard",
+            license: "license",
+            vehicle_rc: "vehicleRc",
+            bank_passbook: "bankPassbook"
+        };
+
+        for (const [field, filename] of Object.entries(docMapping)) {
+            if (files[field]) {
+                updateData.documents[filename as string] = `uploads/${files[field][0].originalname}`;
+            }
+        }
+        
+        if (files["profile_image"]) {
+            updateData.avatar = `uploads/${files["profile_image"][0].originalname}`;
+        }
+    }
+
+    const updatedDriver = await UserModel.findByIdAndUpdate(
+        user._id,
+        { $set: updateData },
+        { new: true }
+    ).select("-pinHash");
+
+
+    return res.json({ message: "Profile updated successfully", user: updatedDriver });
+});
+
+/**
+ * Driver: Logout and mark as offline
+ */
+export const logoutDriver = asyncHandler(async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    await UserModel.findByIdAndUpdate(user._id, {
+        isOnline: false,
+        isReturning: false
+    });
+
+    return res.json({ message: "Logged out successfully" });
+});

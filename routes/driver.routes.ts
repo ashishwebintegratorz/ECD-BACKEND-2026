@@ -8,7 +8,22 @@ import {
     markReachedStoreStatus,
     updateDriverLocation,
     getAllDriverLocations,
+    getDriverProfile,
+    updateDriverProfile,
+    logoutDriver,
 } from "../controllers/driver.controller.js";
+import { getDriverSummary, getMonthlyPerformance } from "../controllers/driverPerformance.controller.js";
+import { 
+    getActiveOrder, 
+    getOrderHistory, 
+    confirmPaymentReceipt 
+} from "../controllers/driverOrder.controller.js";
+import { 
+    getWalletSummary, 
+    requestWithdrawal 
+} from "../controllers/driverWallet.controller.js";
+import { upload } from "../middlewares/multer.js";
+import { checkOnboarding } from "../middlewares/checkOnboarding.middleware.js";
 
 const router = Router();
 
@@ -21,5 +36,27 @@ router.get("/locations", jwtAuth, requireRole("admin"), getAllDriverLocations);
 router.put("/toggle-online", jwtAuth, requireRole("driver"), toggleOnlineStatus);
 router.put("/reached-store", jwtAuth, requireRole("driver"), markReachedStoreStatus);
 router.put("/update-location", jwtAuth, requireRole("driver"), updateDriverLocation);
+router.get("/profile", jwtAuth, requireRole("driver"), getDriverProfile);
+router.post("/documents", jwtAuth, requireRole("driver"), upload.fields([
+    { name: "aadhar_front", maxCount: 1 },
+    { name: "aadhar_back", maxCount: 1 },
+    { name: "pan_card", maxCount: 1 },
+    { name: "license", maxCount: 1 },
+    { name: "vehicle_rc", maxCount: 1 },
+    { name: "bank_passbook", maxCount: 1 },
+    { name: "profile_image", maxCount: 1 }
+]), updateDriverProfile);
+router.post("/logout", jwtAuth, requireRole("driver"), logoutDriver);
+router.get("/summary", jwtAuth, requireRole("driver"), getDriverSummary);
+router.get("/performance/monthly", jwtAuth, requireRole("driver"), getMonthlyPerformance);
+
+// Order Management
+router.get("/orders/active", jwtAuth, requireRole("driver"), getActiveOrder);
+router.get("/orders/history", jwtAuth, requireRole("driver"), getOrderHistory);
+router.patch("/orders/confirm-payment", jwtAuth, requireRole("driver"), checkOnboarding, confirmPaymentReceipt);
+
+// Wallet & Withdrawals
+router.get("/wallet", jwtAuth, requireRole("driver"), getWalletSummary);
+router.post("/withdraw", jwtAuth, requireRole("driver"), checkOnboarding, requestWithdrawal);
 
 export default router;

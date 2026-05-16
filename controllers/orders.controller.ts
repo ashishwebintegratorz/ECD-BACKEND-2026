@@ -22,12 +22,14 @@ import {
   emitOrderStatusUpdate,
   emitNewOrderToRestaurant,
   emitOrderAssignedToDriver,
+  emitDriverLocation,
 } from "../socket/orderSocket.js";
+import { startAssignmentFlow } from "../services/assignment.service.js";
+import { updatePerformanceOnDelivery } from "../services/driverPerformance.service.js";
 import Address from "../models/Address.model.js";
 import { calculateDeliveryCharge, isWithinIndore } from "../utils/delivery.utils.js";
 import Restaurant from "../models/Restaurant.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
-import { getRouteFromORS } from "../services/tracking.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: generate a 4-digit numeric OTP
@@ -372,7 +374,7 @@ export const restaurantCancelOrder = async (req: Request, res: Response) => {
 // CUSTOMER: Cancel Order
 // ─────────────────────────────────────────────────────────────────────────────
 export const cancelOrder = async (req: Request, res: Response) => {
-  const userId = req.user.id;
+  const userId = (req as any).user.id;
   const orderId = req.params.orderId as string;
   const { reason } = req.body;
 
@@ -427,8 +429,9 @@ export const cancelOrder = async (req: Request, res: Response) => {
 };
 
 export const failOrder = async (req: Request, res: Response) => {
-  const userId = req.user.id;
-  const { orderId } = req.params;
+  // Extract user and order details
+  const userId = (req as any).user.id;
+  const orderId = req.params.orderId as string;
   const { reason } = req.body;
 
   const order = await Order.findOne({ _id: orderId, customer: userId });
@@ -478,19 +481,8 @@ export const assignOrderToDriver = async (req: Request, res: Response) => {
   const order = await Order.findById(orderId);
   if (!order) return res.status(404).json({ message: "Order not found" });
 
-  order.assignedDriver = driverId as any;
-  order.deliveryStatus = "driver_notified";
-  await order.save();
-
-  // Push: notify driver
-  notifyDriverAssigned(driverId, order.orderNumber, order._id.toString()).catch(() => { });
-
-  emitOrderAssignedToDriver(driverId, {
-    orderId: order._id,
-    orderNumber: order.orderNumber,
-    address: order.address,
-    message: "You have a new delivery. Please accept or decline.",
-  });
+  // Start the structured assignment flow with 60s timeout
+  await startAssignmentFlow(orderId, driverId);
 
   return res.json({ message: "Driver notified about order", order });
 };
@@ -499,7 +491,7 @@ export const assignOrderToDriver = async (req: Request, res: Response) => {
 // DRIVER: Accept Order
 // ─────────────────────────────────────────────────────────────────────────────
 export const driverAcceptOrder = async (req: Request, res: Response) => {
-  const driverId = req.user.id;
+  const driverId = (req as any).user.id;
   const orderId = req.params.orderId as string;
 
   const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
@@ -509,6 +501,7 @@ export const driverAcceptOrder = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Order is not awaiting driver acceptance" });
 
   order.deliveryStatus = "accepted";
+  order.acceptedAt = new Date();
   await order.save();
 
   // Push: notify customer driver accepted
@@ -528,7 +521,7 @@ export const driverAcceptOrder = async (req: Request, res: Response) => {
 // DRIVER: Decline Order — logged in cancellationLog, admin re-assigns
 // ─────────────────────────────────────────────────────────────────────────────
 export const driverDeclineOrder = async (req: Request, res: Response) => {
-  const driverId = req.user.id;
+  const driverId = (req as any).user.id;
   const orderId = req.params.orderId as string;
   const { reason } = req.body;
 
@@ -558,31 +551,32 @@ export const driverDeclineOrder = async (req: Request, res: Response) => {
 // DRIVER: Update Delivery Status (out_for_delivery / delivered with OTP / failed)
 // ─────────────────────────────────────────────────────────────────────────────
 export const updateOrderByDriver = async (req: Request, res: Response) => {
-  const driverId = req.user.id;
-  const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+  const driverId = (req as any).user.id;
+  const orderId = (Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId) as string;
   const { status, otp } = req.body;
 
-  const allowedStatuses = ["out_for_delivery", "delivered", "failed"];
+  const allowedStatuses = ["reached_store", "picked_up", "out_for_delivery", "delivered", "failed"];
   if (!allowedStatuses.includes(status))
     return res.status(400).json({ message: "Invalid status for driver" });
 
   const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
   if (!order) return res.status(404).json({ message: "Order not found or not assigned to you" });
 
-  // OTP check on delivery (REMOVED per instructions)
-  /*
+  // OTP check on delivery (4-digit numeric shared by customer)
   if (status === "delivered") {
     const customer = await User.findById(order.customer);
     if (!customer) return res.status(404).json({ message: "Customer not found" });
     if (!customer.deliveryOtp) return res.status(400).json({ message: "Customer has no delivery OTP set" });
-    if (!otp) return res.status(400).json({ message: "OTP is required to confirm delivery" });
+    if (!otp) return res.status(400).json({ message: "4-digit delivery OTP is required to confirm delivery" });
     if (String(otp) !== String(customer.deliveryOtp))
       return res.status(400).json({ message: "Invalid delivery OTP" });
   }
-  */
 
   order.deliveryStatus = status as any;
-  if (status === "delivered") order.status = "ready";
+  if (status === "delivered") {
+    order.status = "delivered";
+    order.deliveredAt = new Date();
+  }
   await order.save();
 
   // Push notifications per delivery status
@@ -593,8 +587,9 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
     notifyOrderDelivered(order.customer.toString(), order.orderNumber).catch(() => { });
   }
 
-  // Update driver ledger ref now that we know who delivered
+  // Update driver performance metrics
   if (status === "delivered") {
+    await updatePerformanceOnDelivery(orderId, driverId);
     await updateDriverLedgerRef(orderId, driverId);
   }
 
@@ -621,8 +616,8 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
 // Called after order is assigned to driver — customer shares this with driver
 // ─────────────────────────────────────────────────────────────────────────────
 export const getDeliveryOtp = async (req: Request, res: Response) => {
-  const userId = req.user.id;
-  const { orderId } = req.params;
+  const userId = (req as any).user.id;
+  const orderId = req.params.orderId as string;
 
   const order = await Order.findOne({ _id: orderId, customer: userId });
   if (!order) return res.status(404).json({ message: "Order not found" });
@@ -644,7 +639,7 @@ export const getDeliveryOtp = async (req: Request, res: Response) => {
 // CUSTOMER: Get My Orders (Grouped for Active/Past/Cancelled Tabs)
 // ─────────────────────────────────────────────────────────────────────────────
 export const getMyOrders = async (req: Request, res: Response) => {
-  const userId = req.user.id;
+  const userId = (req as any).user.id;
   const orders = await Order.find({ customer: userId })
     .sort({ createdAt: -1 })
     .populate("paymentTransaction")
@@ -688,8 +683,8 @@ export const getMyOrders = async (req: Request, res: Response) => {
 // CUSTOMER: Get Order Tracking Detail (Map + Progress)
 // ─────────────────────────────────────────────────────────────────────────────
 export const getOrderTracking = async (req: Request, res: Response) => {
-  const { orderId } = req.params;
-  const userId = req.user.id;
+  const orderId = req.params.orderId as string;
+  const userId = (req as any).user.id;
 
   const order = await Order.findOne({ _id: orderId, customer: userId })
     .populate("store", "name location address phone logo")
@@ -744,7 +739,7 @@ export const getOrderTracking = async (req: Request, res: Response) => {
 // ANY: Get Order By ID
 // ─────────────────────────────────────────────────────────────────────────────
 export const getOrderById = async (req: Request, res: Response) => {
-  const { orderId } = req.params;
+  const orderId = req.params.orderId as string;
   const user = (req as any).user;
 
   const order = await Order.findById(orderId)
@@ -812,7 +807,7 @@ export const getAllOrders = async (req: Request, res: Response) => {
 // DRIVER: Get My Orders
 // ─────────────────────────────────────────────────────────────────────────────
 export const getDriverOrders = async (req: Request, res: Response) => {
-  const driverId = req.user.id;
+  const driverId = (req as any).user.id;
   const { status, deliveryStatus } = req.query;
 
   const query: any = { assignedDriver: driverId };
@@ -831,7 +826,9 @@ export const getDriverOrders = async (req: Request, res: Response) => {
 // Filter: ?cancelledBy=restaurant|customer|driver&restaurantId=&from=&to=
 // ─────────────────────────────────────────────────────────────────────────────
 export const getAllCancellations = async (req: Request, res: Response) => {
-  const { cancelledBy, restaurantId, from, to } = req.query;
+  const cancelledBy = req.query.cancelledBy as string;
+  const restaurantId = req.query.restaurantId as string;
+  const { from, to } = req.query;
   const query: any = { status: "cancelled" };
 
   if (cancelledBy) query.cancelledBy = cancelledBy;
@@ -855,7 +852,7 @@ export const getAllCancellations = async (req: Request, res: Response) => {
 // ADMIN: Get Cancellations by Restaurant
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurantCancellations = async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+  const restaurantId = req.params.restaurantId as string;
   const { from, to } = req.query;
 
   const query: any = { store: restaurantId, cancelledBy: "restaurant" };
@@ -895,3 +892,4 @@ export const getCancellationStats = async (req: Request, res: Response) => {
 
   return res.json({ total, breakdown });
 };
+

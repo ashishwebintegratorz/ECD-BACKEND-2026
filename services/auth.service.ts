@@ -10,11 +10,13 @@ export async function findOrCreateUserByPhone(
   let user = await UserModel.findOne({ phone });
 
   if (!user) {
+    const isDriver = (requestedRole || "customer") === "driver";
     user = await UserModel.create({
       phone,
       name: name || undefined,
       role: requestedRole || "customer",
       isVerified: true,
+      riderId: isDriver ? `DRV-${Math.floor(1000 + Math.random() * 9000)}` : undefined
     });
   } else {
     if (!user.isVerified) user.isVerified = true;
@@ -25,6 +27,9 @@ export async function findOrCreateUserByPhone(
     // Allow upgrading from customer to driver/admin if requested
     if (requestedRole && requestedRole !== "customer" && user.role === "customer") {
       user.role = requestedRole;
+      if (requestedRole === "driver" && !user.riderId) {
+        user.riderId = `DRV-${Math.floor(1000 + Math.random() * 9000)}`;
+      }
     }
 
     await user.save();

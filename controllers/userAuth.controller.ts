@@ -1,11 +1,9 @@
 import type { Request, Response } from "express";
-import bcrypt from "bcrypt";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import { createAndSendOtp, verifyOtp } from "../services/otp.service.js";
 import {
   findOrCreateUserByPhone,
   createAuthTokens,
-  setUserPin,
 } from "../services/auth.service.js";
 import {
   BadRequestException,
@@ -15,25 +13,26 @@ import {
 import UserModel from "../models/User.model.js";
 import { verifyRefreshJwt, signAccessJwt } from "../utils/jwt.js";
 
+/**
+ * CUSTOMER: Send OTP
+ */
 export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
-  const { phone, role } = req.body;
+  const { phone } = req.body;
   if (!phone) throw new BadRequestException("Phone required");
 
   await createAndSendOtp(phone);
 
   return res.json({
-    message: `OTP sent on WhatsApp for ${role || "customer"} login`,
+    message: `OTP sent on WhatsApp for customer login`,
   });
 });
 
 /**
- * Verify OTP
- * - Customer: normal OTP login
- * - Driver/Admin: OTP + optional PIN set on first time
+ * CUSTOMER: Verify OTP
  */
 export const verifyOtpController = asyncHandler(
   async (req: Request, res: Response) => {
-    const { phone, code, role, pin, name } = req.body;
+    const { phone, code, name } = req.body;
 
     if (!phone || !code) {
       throw new BadRequestException("Phone and OTP code are required");
@@ -44,21 +43,7 @@ export const verifyOtpController = asyncHandler(
       throw new BadRequestException(verification.reason || "Invalid OTP");
     }
 
-    const isDriver = role === "driver";
-    const isAdmin = role === "admin";
-
-    // Enforce PIN only for admin/driver on first registration
-    if ((isAdmin || isDriver) && !pin) {
-      throw new BadRequestException("PIN is required for admin and driver accounts");
-    }
-
-    const user = await findOrCreateUserByPhone(phone, role as any, name);
-
-    // Set PIN for admin or driver
-    if ((isAdmin || isDriver) && pin) {
-      await setUserPin(user, pin);
-    }
-
+    const user = await findOrCreateUserByPhone(phone, "customer", name);
     const auth = createAuthTokens(user);
 
     return res.json({
@@ -70,41 +55,7 @@ export const verifyOtpController = asyncHandler(
 );
 
 /**
- * Admin PIN Login — phone + PIN only, no OTP needed
- */
-export const loginWithPin = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { phone, pin } = req.body;
-
-    const user = await UserModel.findOne({ phone });
-    if (!user) throw new NotFoundException("User not found");
-
-    // PIN login is admin or driver only
-    if (user.role !== "admin" && user.role !== "driver") {
-      throw new BadRequestException("PIN login is only for admin and driver accounts");
-    }
-
-    if (!user.pinHash) {
-      throw new BadRequestException(
-        "PIN not set. Please register via OTP first to set your PIN."
-      );
-    }
-
-    const ok = await bcrypt.compare(pin, user.pinHash);
-    if (!ok) throw new UnauthorizedException("Invalid PIN");
-
-    const auth = createAuthTokens(user);
-
-    return res.json({
-      token: auth.accessToken,
-      refreshToken: auth.refreshToken,
-      user: auth.user,
-    });
-  }
-);
-
-/**
- * Refresh token – returns new access + refresh + user
+ * REFRESH TOKEN (Shared logic, but kept in user controller for cleanliness)
  */
 export const refreshTokenController = asyncHandler(
   async (req: Request, res: Response) => {
@@ -135,7 +86,6 @@ export const refreshTokenController = asyncHandler(
   }
 );
 
-//refresh token controller
 export const refreshAccessToken = async (req: Request, res: Response, next: Function) => {
   try {
     const { refreshToken } = req.body;

@@ -15,25 +15,26 @@ import {
 import UserModel from "../models/User.model.js";
 import { verifyRefreshJwt, signAccessJwt } from "../utils/jwt.js";
 
+/**
+ * DRIVER: Send OTP
+ */
 export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
-  const { phone, role } = req.body;
+  const { phone } = req.body;
   if (!phone) throw new BadRequestException("Phone required");
 
   await createAndSendOtp(phone);
 
   return res.json({
-    message: `OTP sent on WhatsApp for ${role || "customer"} login`,
+    message: `OTP sent on WhatsApp for driver login`,
   });
 });
 
 /**
- * Verify OTP
- * - Customer: normal OTP login
- * - Driver/Admin: OTP + optional PIN set on first time
+ * DRIVER: Verify OTP + Set 4-digit PIN
  */
 export const verifyOtpController = asyncHandler(
   async (req: Request, res: Response) => {
-    const { phone, code, role, pin, name } = req.body;
+    const { phone, code, pin, name } = req.body;
 
     if (!phone || !code) {
       throw new BadRequestException("Phone and OTP code are required");
@@ -44,20 +45,12 @@ export const verifyOtpController = asyncHandler(
       throw new BadRequestException(verification.reason || "Invalid OTP");
     }
 
-    const isDriver = role === "driver";
-    const isAdmin = role === "admin";
-
-    // Enforce PIN only for admin/driver on first registration
-    if ((isAdmin || isDriver) && !pin) {
-      throw new BadRequestException("PIN is required for admin and driver accounts");
+    if (!pin) {
+      throw new BadRequestException("4-digit PIN is required for driver accounts");
     }
 
-    const user = await findOrCreateUserByPhone(phone, role as any, name);
-
-    // Set PIN for admin or driver
-    if ((isAdmin || isDriver) && pin) {
-      await setUserPin(user, pin);
-    }
+    const user = await findOrCreateUserByPhone(phone, "driver", name);
+    await setUserPin(user, pin);
 
     const auth = createAuthTokens(user);
 
@@ -70,19 +63,14 @@ export const verifyOtpController = asyncHandler(
 );
 
 /**
- * Admin PIN Login — phone + PIN only, no OTP needed
+ * DRIVER: Login with 4-digit PIN
  */
 export const loginWithPin = asyncHandler(
   async (req: Request, res: Response) => {
     const { phone, pin } = req.body;
 
-    const user = await UserModel.findOne({ phone });
-    if (!user) throw new NotFoundException("User not found");
-
-    // PIN login is admin or driver only
-    if (user.role !== "admin" && user.role !== "driver") {
-      throw new BadRequestException("PIN login is only for admin and driver accounts");
-    }
+    const user = await UserModel.findOne({ phone, role: "driver" });
+    if (!user) throw new NotFoundException("Driver not found");
 
     if (!user.pinHash) {
       throw new BadRequestException(
@@ -104,7 +92,7 @@ export const loginWithPin = asyncHandler(
 );
 
 /**
- * Refresh token – returns new access + refresh + user
+ * DRIVER: Refresh Token
  */
 export const refreshTokenController = asyncHandler(
   async (req: Request, res: Response) => {
@@ -121,8 +109,8 @@ export const refreshTokenController = asyncHandler(
     }
 
     const user = await UserModel.findById(payload.sub);
-    if (!user) {
-      throw new UnauthorizedException("User not found");
+    if (!user || user.role !== "driver") {
+      throw new UnauthorizedException("Unauthorized access");
     }
 
     const auth = createAuthTokens(user);
@@ -134,30 +122,3 @@ export const refreshTokenController = asyncHandler(
     });
   }
 );
-
-//refresh token controller
-export const refreshAccessToken = async (req: Request, res: Response, next: Function) => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (!refreshToken) {
-      return res.status(401).json({ message: "Missing refresh token" });
-    }
-
-    const payload = verifyRefreshJwt(refreshToken);
-
-    const user = await UserModel.findById(payload.sub);
-    if (!user) {
-      return res.status(401).json({ message: "Invalid refresh token" });
-    }
-
-    const newAccessToken = signAccessJwt({
-      sub: user._id.toString(),
-      role: user.role,
-    });
-
-    return res.json({ token: newAccessToken });
-  } catch (err) {
-    next(err);
-  }
-};

@@ -4,6 +4,7 @@ export type OrderStatus =
   | "pending"
   | "preparing"   // auto-set when payment confirmed — restaurant starts immediately
   | "ready"       // restaurant marks done, rider notified
+  | "delivered"
   | "cancelled"
   | "failed";
 
@@ -12,6 +13,8 @@ export type DeliveryStatus =
   | "driver_notified"   // driver notified, awaiting acceptance
   | "accepted"          // driver accepted
   | "assigned"
+  | "reached_store"     // driver at restaurant
+  | "picked_up"         // driver collected the food
   | "out_for_delivery"
   | "delivered"
   | "cancelled"
@@ -57,6 +60,9 @@ export interface IOrder extends Document {
   cancellationLog: ICancellationLog[];
   coupon?: { couponId: Types.ObjectId; code: string; discountAmount: number }; // applied coupon
   pickupOtp?: string;            // OTP given by restaurant to rider for pickup
+  acceptedAt?: Date;
+  deliveredAt?: Date;
+  assignmentTimeoutAt?: Date;
   meta?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
@@ -110,6 +116,9 @@ const OrderSchema = new Schema<IOrder>(
       discountAmount: { type: Number },
     },
     pickupOtp: { type: String },
+    acceptedAt: { type: Date },
+    deliveredAt: { type: Date },
+    assignmentTimeoutAt: { type: Date },
     meta: { type: Schema.Types.Mixed },
   },
   { timestamps: true }
