@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import Restaurant from "../models/Restaurant.model.js";
 import Product from "../models/Product.model.js";
+import Category from "../models/Category.model.js";
 import { NotFoundException, BadRequestException } from "../utils/appError.js";
 import { slugify } from "../validators/restaurant.validator.js";
 import { Types } from "mongoose";
@@ -131,10 +132,10 @@ export const searchRestaurants = async (req: Request, res: Response) => {
     const restaurants = await Restaurant.find({
         isActive: true,
         $or: [
-            { name: regex },
-            { categories: { $in: [regex] } },
-            { "menu.name": regex },
-            { description: regex },
+            { name: { $regex: regex } },
+            { categories: { $regex: regex } },
+            { "menu.name": { $regex: regex } },
+            { description: { $regex: regex } },
         ],
     })
         .select("name slug description address location logo coverImage categories adminRating featured orderCount")
@@ -153,20 +154,21 @@ export const searchRestaurants = async (req: Request, res: Response) => {
 // PUBLIC: GET /api/restaurants/by-category/:slug
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurantsByCategory = async (req: Request, res: Response) => {
-    const { slug } = req.params;
+    const slug = String(req.params.slug);
 
     // 1. Find the category to get its name
     const category = await Category.findOne({ slug });
 
     // 2. Search restaurants that have this category name or matching items
-    const query = category ? category.name : slug;
+    const categoryName = category ? category.name : "";
+    const query = categoryName || slug;
     const regex = new RegExp(query, "i");
 
     const restaurants = await Restaurant.find({
         isActive: true,
         $or: [
-            { categories: { $in: [regex] } },
-            { "menu.name": regex }
+            { categories: { $regex: regex } },
+            { "menu.name": { $regex: regex } }
         ]
     })
         .sort({ featured: -1, adminRating: -1, orderCount: -1 })
@@ -254,8 +256,9 @@ export const getSuggestions = async (req: Request, res: Response) => {
 // PUBLIC: GET /api/restaurants/details/:slug
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurantBySlug = async (req: Request, res: Response) => {
+    const slug = String(req.params.slug);
     const restaurant = await Restaurant.findOne({
-        slug: req.params.slug,
+        slug,
         isActive: true,
     }).lean();
 
@@ -295,19 +298,15 @@ export const getRestaurantBySlug = async (req: Request, res: Response) => {
 // PUBLIC: GET /api/restaurants/menu/:slug?foodType=veg|non-veg|vegan
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurantMenu = async (req: Request, res: Response) => {
-    const { slug } = req.params;
+    const slug = String(req.params.slug);
     const foodType = req.query.foodType as string | undefined;
-
-    const restaurant = await Restaurant.findOne(
-        {
-            $or: [
-                { slug },
-                ...(Types.ObjectId.isValid(slug) ? [{ _id: new Types.ObjectId(slug) }] : [])
-            ],
-            isActive: true
-        },
-        { menu: 1 } // projection — only fetch menu field
-    ).lean();
+    const query: any = { isActive: true };
+    if (typeof slug === "string" && Types.ObjectId.isValid(slug)) {
+        query.$or = [{ slug }, { _id: new Types.ObjectId(slug) }];
+    } else {
+        query.slug = slug;
+    }
+    const restaurant = await Restaurant.findOne(query, { menu: 1 }).lean();
 
     if (!restaurant) throw new NotFoundException("Restaurant not found");
 
@@ -342,6 +341,7 @@ export const createRestaurant = async (req: Request, res: Response) => {
         email,
         logo,
         coverImage,
+        paymentQr: req.body.paymentQr,
         categories: categories || [],
     });
 
@@ -356,7 +356,7 @@ export const updateRestaurant = async (req: Request, res: Response) => {
     if (!restaurant) throw new NotFoundException("Restaurant not found");
 
     const { name, slug, description, address, phone, email,
-        logo, coverImage, isActive, featured, lat, lng, categories } = req.body;
+        logo, coverImage, isActive, featured, lat, lng, categories, storeType, paymentQr } = req.body;
 
     if (slug && slug !== restaurant.slug) {
         const taken = await Restaurant.findOne({ slug });
@@ -382,6 +382,8 @@ export const updateRestaurant = async (req: Request, res: Response) => {
             ...(isActive !== undefined && { isActive }),
             ...(featured !== undefined && { featured }),
             ...(categories !== undefined && { categories }),
+            ...(storeType !== undefined && { storeType }),
+            ...(paymentQr !== undefined && { paymentQr }),
             location,
         },
         { new: true, runValidators: true }
@@ -450,7 +452,7 @@ export const updateMenuItem = async (req: Request, res: Response) => {
     if (!restaurant) throw new NotFoundException("Restaurant not found");
 
     const item = restaurant.menu.find(
-        (m) => (m as any)._id.equals(toObjectId(itemId))
+        (m) => (m as any)._id.toString() === itemId
     );
     if (!item) throw new NotFoundException("Menu item not found");
 
@@ -480,7 +482,7 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
 
     const before = restaurant.menu.length;
     restaurant.menu = restaurant.menu.filter(
-        (m) => !(m as any)._id.equals(toObjectId(itemId))
+        (m) => (m as any)._id.toString() !== itemId
     ) as any;
 
     if (restaurant.menu.length === before)
