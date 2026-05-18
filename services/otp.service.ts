@@ -59,24 +59,18 @@ export async function createAndSendOtp(
 
   });
 
-  /* try {
- 
-     const apiKey =
-       process.env.TWO_FACTOR_API_KEY;
- 
-     const url =
-       `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKART`;
- 
-     const response =
-       await axios.get(url);
- 
-     console.log(response.data);
- 
-   } catch (error) {
- 
-     console.log(error);
- 
-   }*/
+  try {
+    const apiKey = process.env.TWO_FACTOR_API_KEY;
+    if (apiKey) {
+      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKART`;
+      const response = await axios.get(url);
+      console.log("[2Factor OTP] Sent successfully:", response.data);
+    } else {
+      console.log("[2Factor OTP] API key missing, skipped sending");
+    }
+  } catch (error: any) {
+    console.error("[2Factor OTP] Failed to send:", error.message || error);
+  }
 
   return { ok: true };
 

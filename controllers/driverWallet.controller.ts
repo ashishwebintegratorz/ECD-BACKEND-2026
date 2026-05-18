@@ -3,6 +3,7 @@ import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import User from "../models/User.model.js";
 import WithdrawalRequest from "../models/WithdrawalRequest.model.js";
 import { BadRequestException } from "../utils/appError.js";
+import { sendPushToUser } from "../services/notification.service.js";
 
 /**
  * GET: Rider wallet balance and recent withdrawal requests
@@ -90,9 +91,8 @@ export const processWithdrawal = asyncHandler(async (req: Request, res: Response
             throw new BadRequestException("Driver no longer has sufficient balance");
         }
         
-        // Proportional hours deduction
-        const deductionRatio = withdrawal.amount / currentBalance;
-        const secondsToDeduct = Math.floor(currentHours * deductionRatio);
+        // Deduct exactly 1 hour (3600 seconds) for every ₹100 withdrawn
+        const secondsToDeduct = Math.floor((withdrawal.amount / 100) * 3600);
 
         // Deduct from wallet and hours
         driver.walletBalance = currentBalance - withdrawal.amount;
@@ -105,6 +105,27 @@ export const processWithdrawal = asyncHandler(async (req: Request, res: Response
         }
 
         await driver.save();
+
+        // Send Push Notification on Payout Approval
+        await sendPushToUser({
+            userId: driver._id.toString(),
+            title: "Payout Approved 💸",
+            body: `Your withdrawal request of ₹${withdrawal.amount} has been successfully approved and transferred to UPI ${driver.upi || ''}!`,
+            type: "refund_completed",
+            data: { amount: String(withdrawal.amount) }
+        });
+    } else {
+        // Send Push Notification on Payout Decline
+        const driver = await User.findById(withdrawal.driver);
+        if (driver) {
+            await sendPushToUser({
+                userId: driver._id.toString(),
+                title: "Payout Request Declined ❌",
+                body: `Your withdrawal request of ₹${withdrawal.amount} was declined. Note: ${adminNote || 'No reason provided.'}`,
+                type: "order_cancelled",
+                data: { amount: String(withdrawal.amount) }
+            });
+        }
     }
 
     withdrawal.status = status as any;

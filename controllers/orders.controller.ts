@@ -24,7 +24,7 @@ import {
   emitOrderAssignedToDriver,
   emitDriverLocation,
 } from "../socket/orderSocket.js";
-import { startAssignmentFlow } from "../services/assignment.service.js";
+import { startAssignmentFlow, assignToNearestDriver } from "../services/assignment.service.js";
 import { updatePerformanceOnDelivery } from "../services/driverPerformance.service.js";
 import Address from "../models/Address.model.js";
 import { calculateDeliveryCharge, isWithinIndore } from "../utils/delivery.utils.js";
@@ -319,7 +319,12 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
     updatedAt: (order as any).updatedAt,
   });
 
-  return res.json({ message: "Order marked as ready. Admin will assign a rider.", order });
+  // Auto-assign to nearest available driver
+  assignToNearestDriver(orderId).catch(err => {
+    console.error(`[Auto-Assign] Failed to auto assign order ${orderId}:`, err);
+  });
+
+  return res.json({ message: "Order marked as ready. Assigning nearest rider...", order });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

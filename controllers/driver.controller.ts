@@ -4,6 +4,7 @@ import UserModel from "../models/User.model.js";
 import OrderModel from "../models/Order.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
 import { emitDriverLocation } from "../socket/orderSocket.js";
+import { uploadToImageKit } from "../services/imagekit.service.js";
 
 /**
  * Get all drivers with their busy status
@@ -142,35 +143,57 @@ export const getDriverProfile = asyncHandler(async (req: Request, res: Response)
  */
 export const updateDriverProfile = asyncHandler(async (req: Request, res: Response) => {
     const user = (req as any).user;
-    const { name, email } = req.body;
+    const { name, email, upi } = req.body;
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
     const updateData: any = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
+    if (upi) updateData.upi = upi;
 
-    // Handle document paths (in a real app, these would be S3/Cloudinary URLs)
-    // For now, we'll store mock paths based on originalname
     if (files) {
         if (!updateData.documents) updateData.documents = {};
         
-        const docMapping: any = {
+        const uploadPromises: Promise<any>[] = [];
+
+        // Dynamic ImageKit Upload Handler under Folder: /drivers/{driverId}
+        const docMapping: Record<string, string> = {
             aadhar_front: "aadharFront",
             aadhar_back: "aadharBack",
-            pan_card: "panCard",
-            license: "license",
-            vehicle_rc: "vehicleRc",
-            bank_passbook: "bankPassbook"
+            license: "license"
         };
 
-        for (const [field, filename] of Object.entries(docMapping)) {
-            if (files[field]) {
-                updateData.documents[filename as string] = `uploads/${files[field][0].originalname}`;
+        for (const [field, dbField] of Object.entries(docMapping)) {
+            if (files[field] && files[field][0]) {
+                const file = files[field][0];
+                const folderPath = `/drivers/${user._id}`;
+                const sanitizedName = `${field}_${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+                
+                uploadPromises.push(
+                    uploadToImageKit(file.buffer, sanitizedName, folderPath)
+                        .then(url => {
+                            updateData.documents[dbField] = url;
+                        })
+                );
             }
         }
         
-        if (files["profile_image"]) {
-            updateData.avatar = `uploads/${files["profile_image"][0].originalname}`;
+        if (files["profile_image"] && files["profile_image"][0]) {
+            const file = files["profile_image"][0];
+            const folderPath = `/drivers/${user._id}`;
+            const sanitizedName = `profile_${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+            
+            uploadPromises.push(
+                uploadToImageKit(file.buffer, sanitizedName, folderPath)
+                    .then(url => {
+                        updateData.avatar = url;
+                    })
+            );
+        }
+
+        // Wait for all concurrent uploads to finish
+        if (uploadPromises.length > 0) {
+            await Promise.all(uploadPromises);
         }
     }
 
@@ -179,7 +202,6 @@ export const updateDriverProfile = asyncHandler(async (req: Request, res: Respon
         { $set: updateData },
         { new: true }
     ).select("-pinHash");
-
 
     return res.json({ message: "Profile updated successfully", user: updatedDriver });
 });

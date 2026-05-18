@@ -3,6 +3,7 @@ import User from "../models/User.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
 import { emitOrderAssignedToDriver, emitOrderStatusUpdate } from "../socket/orderSocket.js";
 import { haversineDistance } from "../utils/delivery.utils.js";
+import { notifyDriverAssigned } from "./notification.service.js";
 
 const ASSIGNMENT_TIMEOUT_MS = 60000; // 60 seconds
 
@@ -46,6 +47,9 @@ export const startAssignmentFlow = async (orderId: string, driverId: string) => 
         timeoutAt: timeout,
     });
 
+    // Send push notification
+    notifyDriverAssigned(driverId, order.orderNumber, order._id.toString()).catch(() => {});
+
     // Timeout Logic: If the driver doesn't accept/decline within 60s, unassign them
     setTimeout(async () => {
         const currentOrder = await Order.findById(orderId);
@@ -63,7 +67,60 @@ export const startAssignmentFlow = async (orderId: string, driverId: string) => 
                 message: "Driver assignment timed out. Please re-assign.",
             });
 
-            console.log(`[Assignment] Order ${orderId} timed out for driver ${driverId}`);
+            // Re-assign to next nearest driver logic
+            assignToNearestDriver(orderId, [driverId]); 
         }
     }, ASSIGNMENT_TIMEOUT_MS);
+};
+
+/**
+ * Automatically assign order to the nearest available driver
+ */
+export const assignToNearestDriver = async (orderId: string, excludeDriverIds: string[] = []) => {
+    const order = await Order.findById(orderId).populate("store");
+    if (!order) return;
+
+    if (order.status !== "ready") return; // Only assign when order is ready
+    if (order.assignedDriver) return; // Already assigned
+
+    const restaurant: any = order.store;
+    if (!restaurant?.location?.coordinates) return;
+
+    const [storeLng, storeLat] = restaurant.location.coordinates;
+
+    // Find all online, non-busy drivers
+    const onlineDrivers = await User.find({ role: "driver", isOnline: true, isReturning: false });
+    
+    let nearestDriverId = null;
+    let minDistance = Infinity;
+
+    for (const driver of onlineDrivers) {
+        if (excludeDriverIds.includes(driver._id.toString())) continue;
+
+        // Check if driver has active order
+        const activeOrder = await Order.findOne({
+            assignedDriver: driver._id,
+            deliveryStatus: { $in: ["assigned", "driver_notified", "accepted", "out_for_delivery"] }
+        });
+
+        if (!activeOrder) {
+            // Driver is free, get their location
+            const loc = await DriverLocation.findOne({ driver: driver._id });
+            if (loc?.location?.coordinates) {
+                const [lng, lat] = loc.location.coordinates;
+                const distance = haversineDistance(lat, lng, storeLat, storeLng);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestDriverId = driver._id.toString();
+                }
+            }
+        }
+    }
+
+    if (nearestDriverId) {
+        console.log(`[Auto-Assign] Found nearest driver ${nearestDriverId} for order ${orderId} (Distance: ${minDistance.toFixed(2)} km)`);
+        await startAssignmentFlow(orderId, nearestDriverId);
+    } else {
+        console.log(`[Auto-Assign] No available drivers for order ${orderId}`);
+    }
 };

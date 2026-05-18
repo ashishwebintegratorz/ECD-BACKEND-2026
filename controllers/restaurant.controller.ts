@@ -154,10 +154,10 @@ export const searchRestaurants = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurantsByCategory = async (req: Request, res: Response) => {
     const { slug } = req.params;
-    
+
     // 1. Find the category to get its name
     const category = await Category.findOne({ slug });
-    
+
     // 2. Search restaurants that have this category name or matching items
     const query = category ? category.name : slug;
     const regex = new RegExp(query, "i");
@@ -169,9 +169,9 @@ export const getRestaurantsByCategory = async (req: Request, res: Response) => {
             { "menu.name": regex }
         ]
     })
-    .sort({ featured: -1, adminRating: -1, orderCount: -1 })
-    .limit(50)
-    .lean();
+        .sort({ featured: -1, adminRating: -1, orderCount: -1 })
+        .limit(50)
+        .lean();
 
     return res.json({
         success: true,
@@ -299,12 +299,12 @@ export const getRestaurantMenu = async (req: Request, res: Response) => {
     const foodType = req.query.foodType as string | undefined;
 
     const restaurant = await Restaurant.findOne(
-        { 
+        {
             $or: [
-                { slug }, 
+                { slug },
                 ...(Types.ObjectId.isValid(slug) ? [{ _id: new Types.ObjectId(slug) }] : [])
             ],
-            isActive: true 
+            isActive: true
         },
         { menu: 1 } // projection — only fetch menu field
     ).lean();

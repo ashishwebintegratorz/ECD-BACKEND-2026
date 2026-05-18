@@ -40,10 +40,7 @@ router.get("/profile", jwtAuth, requireRole("driver"), getDriverProfile);
 router.post("/documents", jwtAuth, requireRole("driver"), upload.fields([
     { name: "aadhar_front", maxCount: 1 },
     { name: "aadhar_back", maxCount: 1 },
-    { name: "pan_card", maxCount: 1 },
     { name: "license", maxCount: 1 },
-    { name: "vehicle_rc", maxCount: 1 },
-    { name: "bank_passbook", maxCount: 1 },
     { name: "profile_image", maxCount: 1 }
 ]), updateDriverProfile);
 router.post("/logout", jwtAuth, requireRole("driver"), logoutDriver);

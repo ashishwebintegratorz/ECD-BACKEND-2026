@@ -13,7 +13,7 @@ export const getActiveOrder = asyncHandler(async (req: Request, res: Response) =
     const order = await Order.findOne({
         assignedDriver: driverId,
         deliveryStatus: { $in: ["accepted", "assigned", "out_for_delivery", "reached_store", "driver_notified"] }
-    }).populate("store").populate("customer", "name phone avatar");
+    }).populate("store").populate("customer", "name phone avatar").populate("address");
 
     if (!order) return res.json({ order: null });
 
@@ -49,7 +49,7 @@ export const getActiveOrder = asyncHandler(async (req: Request, res: Response) =
         customer: {
             name: (order.customer as any)?.name,
             phone: (order.customer as any)?.phone,
-            address: typeof order.address === "string" ? order.address : (order.address as any)?.address,
+            address: typeof order.address === "string" ? order.address : ((order.address as any)?.fullAddress || (order.address as any)?.address || "N/A"),
             distance_km: distToCustomer.toFixed(1)
         },
         tracking: {

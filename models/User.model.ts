@@ -13,6 +13,7 @@ export interface IUser extends Document {
   addresses?: Types.ObjectId[];
   isOnline: boolean;
   isReturning: boolean;
+  upi?: string;         // ✅ NEW: Driver UPI ID
   deliveryOtp?: string; // fixed OTP used to confirm delivery
   riderId?: string;     // unique identifier for driver (e.g. DRV_001)
   totalWorkSeconds?: number;
@@ -23,10 +24,7 @@ export interface IUser extends Document {
   documents?: {
     aadharFront?: string;
     aadharBack?: string;
-    panCard?: string;
     license?: string;
-    vehicleRc?: string;
-    bankPassbook?: string;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -45,6 +43,7 @@ const UserSchema = new Schema<IUser>(
     addresses: [{ type: Schema.Types.ObjectId, ref: "Address" }],
     isOnline: { type: Boolean, default: false, index: true },
     isReturning: { type: Boolean, default: false, index: true },
+    upi: { type: String }, // ✅ NEW: Driver UPI ID
     deliveryOtp: { type: String },
     riderId: { type: String, unique: true, sparse: true },
     totalWorkSeconds: { type: Number, default: 0 },
@@ -55,10 +54,7 @@ const UserSchema = new Schema<IUser>(
     documents: {
       aadharFront: String,
       aadharBack: String,
-      panCard: String,
       license: String,
-      vehicleRc: String,
-      bankPassbook: String,
     },
     meta: { type: Schema.Types.Mixed },
   },

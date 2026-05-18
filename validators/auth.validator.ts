@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const phoneSchema = z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits");
+const phoneSchema = z.string().regex(/^(?:\+91|91)?\d{10}$/, "Phone must be a valid 10-digit number with optional country code");
 
 export const sendOtpSchema = z.object({
   body: z.object({
