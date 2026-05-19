@@ -29,6 +29,7 @@ import groceryRoutes from "./routes/grocery.route.js";
 import { razorpayWebhook } from "./controllers/razorpay.controller.js";
 
 const app = express();
+app.set("trust proxy", 1);
 const BASE_PATH = config.BASE_PATH;
 
 // ── Rate Limiters ─────────────────────────────────────────────────────────────
