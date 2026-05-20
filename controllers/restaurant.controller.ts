@@ -570,6 +570,14 @@ export const restaurantLogin = async (req: Request, res: Response) => {
         return res.status(401).json({ message: "Invalid restaurant key" });
     }
 
+    // Self-healing: if an existing restaurant lacks a restaurantId, generate and save it
+    if (!restaurant.restaurantId) {
+        let restaurantId = '';
+        for (let i = 0; i < 14; i++) restaurantId += Math.floor(Math.random() * 10).toString();
+        restaurant.restaurantId = restaurantId;
+        await restaurant.save();
+    }
+
     // For the current MVP setup, we use the test token bypass. 
     // In production, sign a proper JWT here.
     return res.json({
