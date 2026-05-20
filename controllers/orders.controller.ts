@@ -964,7 +964,7 @@ export const restaurantMarkPreparing = async (req: Request, res: Response) => {
 // RESTAURANT: Verify Pickup OTP & Handover
 // ─────────────────────────────────────────────────────────────────────────────
 export const restaurantVerifyPickup = async (req: Request, res: Response) => {
-  const { orderId } = req.params;
+  const orderId = req.params.orderId as string;
   const { otp } = req.body;
 
   const order = await Order.findById(orderId);

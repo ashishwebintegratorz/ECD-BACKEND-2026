@@ -4,6 +4,7 @@ export type OrderStatus =
   | "pending"
   | "preparing"   // auto-set when payment confirmed — restaurant starts immediately
   | "ready"       // restaurant marks done, rider notified
+  | "picked_up"
   | "delivered"
   | "cancelled"
   | "failed";
