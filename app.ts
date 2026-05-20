@@ -26,6 +26,7 @@ import notificationRoutes from "./routes/notification.routes.js";
 import couponRoutes from "./routes/coupon.routes.js";
 import popularDishRoutes from "./routes/popularDish.routes.js";
 import groceryRoutes from "./routes/grocery.route.js";
+import uploadRoutes from "./routes/upload.routes.js";
 import { razorpayWebhook } from "./controllers/razorpay.controller.js";
 
 const app = express();
@@ -106,6 +107,8 @@ app.use(`${BASE_PATH}/notifications`, notificationRoutes);
 app.use(`${BASE_PATH}/coupons`, couponRoutes);
 app.use(`${BASE_PATH}/popular-dishes`, popularDishRoutes);
 // app.use(`${BASE_PATH}/grocery`, groceryRoutes); // Grocery services disabled
+
+app.use(`${BASE_PATH}/upload`, uploadRoutes);
 
 app.use(`${BASE_PATH}/razorpay`, razorpayRoutes);
 

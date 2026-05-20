@@ -265,10 +265,14 @@ export const getRestaurantBySlug = async (req: Request, res: Response) => {
 
     if (!restaurant) throw new NotFoundException("Restaurant not found");
 
-    // Group available menu items by foodType
+    // Group available menu items by foodType and hide b2bPrice
     const groupedMenu: Record<string, typeof restaurant.menu> = {};
     for (const item of restaurant.menu) {
         if (!item.isAvailable) continue;
+        
+        // Hide internal B2B price from public users
+        delete (item as any).b2bPrice;
+        
         if (!groupedMenu[item.foodType]) groupedMenu[item.foodType] = [];
         groupedMenu[item.foodType].push(item);
     }
@@ -314,6 +318,9 @@ export const getRestaurantMenu = async (req: Request, res: Response) => {
     let menu = restaurant.menu.filter((item) => item.isAvailable);
     if (foodType) menu = menu.filter((item) => item.foodType === foodType);
 
+    // Hide internal B2B price from public users
+    menu.forEach(item => delete (item as any).b2bPrice);
+
     return res.json({ menu });
 };
 
@@ -321,7 +328,7 @@ export const getRestaurantMenu = async (req: Request, res: Response) => {
 // ADMIN: POST /api/restaurants/admin/create
 // ─────────────────────────────────────────────────────────────────────────────
 export const createRestaurant = async (req: Request, res: Response) => {
-    const { name, description, address, phone, email, logo, coverImage, lat, lng, categories } = req.body;
+    const { name, description, address, phone, email, logo, coverImage, accountDetail, lat, lng, categories } = req.body;
 
     // Auto-generate slug if not provided, ensure uniqueness
     let slug: string = req.body.slug ? req.body.slug : slugify(name);
@@ -335,9 +342,14 @@ export const createRestaurant = async (req: Request, res: Response) => {
     let restaurantKey = '';
     for (let i = 0; i < 14; i++) restaurantKey += Math.floor(Math.random() * 10).toString();
 
+    // Generate 14-digit custom ID
+    let restaurantId = '';
+    for (let i = 0; i < 14; i++) restaurantId += Math.floor(Math.random() * 10).toString();
+
     const restaurant = await Restaurant.create({
         name,
         slug,
+        restaurantId,
         restaurantKey,
         storeType: req.body.storeType ?? "restaurant",
         description,
@@ -347,6 +359,7 @@ export const createRestaurant = async (req: Request, res: Response) => {
         email,
         logo,
         coverImage,
+        accountDetail,
         paymentQr: req.body.paymentQr,
         categories: categories || [],
     });
@@ -362,7 +375,7 @@ export const updateRestaurant = async (req: Request, res: Response) => {
     if (!restaurant) throw new NotFoundException("Restaurant not found");
 
     const { name, slug, description, address, phone, email,
-        logo, coverImage, isActive, featured, lat, lng, categories, storeType, paymentQr } = req.body;
+        logo, coverImage, accountDetail, isActive, featured, lat, lng, categories, storeType, paymentQr } = req.body;
 
     if (slug && slug !== restaurant.slug) {
         const taken = await Restaurant.findOne({ slug });
@@ -385,6 +398,7 @@ export const updateRestaurant = async (req: Request, res: Response) => {
             ...(email !== undefined && { email }),
             ...(logo !== undefined && { logo }),
             ...(coverImage !== undefined && { coverImage }),
+            ...(accountDetail !== undefined && { accountDetail }),
             ...(isActive !== undefined && { isActive }),
             ...(featured !== undefined && { featured }),
             ...(categories !== undefined && { categories }),
@@ -427,7 +441,7 @@ export const deleteRestaurant = async (req: Request, res: Response) => {
 // ADMIN: POST /api/restaurants/admin/menu/add/:id
 // ─────────────────────────────────────────────────────────────────────────────
 export const addMenuItem = async (req: Request, res: Response) => {
-    const { name, description, price, image, foodType, isAvailable } = req.body;
+    const { name, description, price, b2bPrice, image, foodType, isAvailable } = req.body;
 
     const restaurant = await Restaurant.findById(req.params.id);
     if (!restaurant) throw new NotFoundException("Restaurant not found");
@@ -436,6 +450,7 @@ export const addMenuItem = async (req: Request, res: Response) => {
         name,
         description,
         price: Number(price),
+        b2bPrice: b2bPrice !== undefined ? Number(b2bPrice) : 0,
         image,
         foodType,
         isAvailable: isAvailable ?? true,
@@ -465,6 +480,7 @@ export const updateMenuItem = async (req: Request, res: Response) => {
     if (req.body.name !== undefined) item.name = req.body.name;
     if (req.body.description !== undefined) item.description = req.body.description;
     if (req.body.price !== undefined) item.price = Number(req.body.price);
+    if (req.body.b2bPrice !== undefined) (item as any).b2bPrice = Number(req.body.b2bPrice);
     if (req.body.image !== undefined) item.image = req.body.image;
     if (req.body.foodType !== undefined) item.foodType = req.body.foodType;
     if (req.body.isAvailable !== undefined) item.isAvailable = req.body.isAvailable;
@@ -538,6 +554,7 @@ export const restaurantLogin = async (req: Request, res: Response) => {
         restaurant = new Restaurant({
             name: "Test ECD Restaurant",
             slug: "test-ecd-restaurant-" + Date.now(),
+            restaurantId: "98765432109876",
             restaurantKey: "12345678901234",
             storeType: "restaurant",
             status: "active",
@@ -557,7 +574,8 @@ export const restaurantLogin = async (req: Request, res: Response) => {
     // In production, sign a proper JWT here.
     return res.json({
         token: "RESTAURANT_TEST_TOKEN",
-        restaurantId: restaurant._id,
+        _id: restaurant._id,
+        restaurantId: restaurant.restaurantId,
         name: restaurant.name,
         logo: restaurant.logo,
     });
@@ -597,6 +615,7 @@ export const getRestaurantProfile = async (req: Request, res: Response) => {
         success: true,
         restaurant: {
             id: restaurant._id,
+            restaurantId: restaurant.restaurantId,
             name: restaurant.name,
             logo: restaurant.logo,
             coverImage: restaurant.coverImage,
