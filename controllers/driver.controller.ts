@@ -177,7 +177,7 @@ export const updateDriverProfile = asyncHandler(async (req: Request, res: Respon
                 const sanitizedName = `${field}_${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9.]/g, "_")}`;
                 
                 uploadPromises.push(
-                    uploadToImageKit(file.buffer, sanitizedName, folderPath)
+                    uploadToImageKit(file as any, sanitizedName, folderPath)
                         .then(url => {
                             updateData.documents[dbField] = url;
                         })
@@ -191,7 +191,7 @@ export const updateDriverProfile = asyncHandler(async (req: Request, res: Respon
             const sanitizedName = `profile_${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9.]/g, "_")}`;
             
             uploadPromises.push(
-                uploadToImageKit(file.buffer, sanitizedName, folderPath)
+                uploadToImageKit(file as any, sanitizedName, folderPath)
                     .then(url => {
                         updateData.avatar = url;
                     })

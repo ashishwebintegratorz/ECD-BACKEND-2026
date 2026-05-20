@@ -7,7 +7,7 @@ import axios from "axios";
  * @param folder - Folder path inside ImageKit (e.g. "/drivers/driverId")
  */
 export const uploadToImageKit = async (
-    file: Buffer | string,
+    file: any,
     fileName: string,
     folder: string
 ): Promise<string> => {
@@ -15,11 +15,17 @@ export const uploadToImageKit = async (
         const privateKey = process.env.IMAGEKIT_PRIVATE_KEY || "";
         const authHeader = Buffer.from(privateKey + ":").toString("base64");
 
-        const fileData = Buffer.isBuffer(file) ? file.toString("base64") : file;
+        // Support both raw buffers/strings and full Multer file objects
+        let rawFile = file;
+        if (file && typeof file === "object" && file.buffer) {
+            rawFile = file.buffer;
+        }
+
+        const fileData = Buffer.isBuffer(rawFile) ? rawFile.toString("base64") : rawFile;
 
         // User requested debug logs
         console.log("UPLOAD FILE DATA:", file);
-        console.log("BUFFER EXISTS:", !!(file as any)?.buffer);
+        console.log("BUFFER EXISTS:", !!(file as any)?.buffer || Buffer.isBuffer(file));
         console.log("ORIGINAL NAME:", (file as any)?.originalname);
 
         const response = await axios.post("https://upload.imagekit.io/api/v1/files/upload", {
