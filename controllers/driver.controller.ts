@@ -142,6 +142,13 @@ export const getDriverProfile = asyncHandler(async (req: Request, res: Response)
  * Handles multipart form data for document uploads
  */
 export const updateDriverProfile = asyncHandler(async (req: Request, res: Response) => {
+    // User requested debug logs
+    console.log("REQ FILES:", req.files);
+    console.log("REQ FILE:", req.file);
+    if (req.files) {
+        console.log("FIRST FILE:", (req.files as any)[0]);
+    }
+
     const user = (req as any).user;
     const { name, email, upi } = req.body;
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };

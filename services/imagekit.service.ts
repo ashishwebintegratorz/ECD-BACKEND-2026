@@ -17,6 +17,11 @@ export const uploadToImageKit = async (
 
         const fileData = Buffer.isBuffer(file) ? file.toString("base64") : file;
 
+        // User requested debug logs
+        console.log("UPLOAD FILE DATA:", file);
+        console.log("BUFFER EXISTS:", !!(file as any)?.buffer);
+        console.log("ORIGINAL NAME:", (file as any)?.originalname);
+
         const response = await axios.post("https://upload.imagekit.io/api/v1/files/upload", {
             file: fileData,
             fileName: fileName,
