@@ -29,9 +29,11 @@ export interface IRestaurant extends Document {
     menu: IMenuItem[];             // used by restaurants; grocery uses Product catalog
     categories?: string[];         // e.g. ["Indian", "Biryani"]
     isActive: boolean;
+    restaurantKey: string;         // 14-digit login code
     adminRating: number;
     featured: boolean;
     orderCount: number;
+    walletBalance: number;         // Current bucket/earnings balance
     paymentQr?: string;            // QR code image URL for payments
     createdAt: Date;
     updatedAt: Date;
@@ -74,9 +76,11 @@ const RestaurantSchema = new Schema<IRestaurant>(
         menu: { type: [MenuItemSchema], default: [] },
         categories: { type: [String], default: [], index: true },
         isActive: { type: Boolean, default: true, index: true },
+        restaurantKey: { type: String, required: true, unique: true },
         adminRating: { type: Number, default: 0, min: 0, max: 5 },
         featured: { type: Boolean, default: false, index: true },
         orderCount: { type: Number, default: 0 },
+        walletBalance: { type: Number, default: 0 },
         paymentQr: { type: String },
     },
     { timestamps: true }

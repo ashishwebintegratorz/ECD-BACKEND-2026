@@ -577,6 +577,24 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Invalid delivery OTP" });
   }
 
+  // OTP check on pickup (4-digit numeric given by restaurant)
+  if (status === "picked_up") {
+    if (!order.pickupOtp) return res.status(400).json({ message: "No pickup OTP set for this order" });
+    if (!otp) return res.status(400).json({ message: "4-digit pickup OTP is required to confirm pickup" });
+    if (String(otp) !== String(order.pickupOtp))
+      return res.status(400).json({ message: "Invalid pickup OTP" });
+    
+    // Set main status as picked up so restaurant sees it in history
+    order.status = "picked_up";
+    
+    // Credit the restaurant's wallet bucket
+    const restaurant = await Restaurant.findById(order.store);
+    if (restaurant) {
+      restaurant.walletBalance += order.payableAmount;
+      await restaurant.save();
+    }
+  }
+
   order.deliveryStatus = status as any;
   if (status === "delivered") {
     order.status = "delivered";
@@ -700,9 +718,8 @@ export const getOrderTracking = async (req: Request, res: Response) => {
 
   // 1. Calculate current step and timeline
   let currentStep = 0; // Order Placed
-  if (order.status === "preparing") currentStep = 1;
-  if (order.status === "ready" && order.deliveryStatus !== "out_for_delivery") currentStep = 1;
-  if (order.deliveryStatus === "out_for_delivery") currentStep = 2;
+  if (["preparing", "ready"].includes(order.status)) currentStep = 1;
+  if (["picked_up", "out_for_delivery"].includes(order.deliveryStatus)) currentStep = 2;
   if (order.deliveryStatus === "delivered") currentStep = 3;
 
   const timeline = [
@@ -718,8 +735,8 @@ export const getOrderTracking = async (req: Request, res: Response) => {
   const diffInMinutes = (now.getTime() - orderCreatedAt.getTime()) / (1000 * 60);
   const canCancel = diffInMinutes <= 5 && ["pending", "preparing"].includes(order.status);
 
-  // 3. Rider details logic (only show when on the way or delivered)
-  const showRider = ["out_for_delivery", "delivered"].includes(order.deliveryStatus);
+  // 3. Rider details logic (show when driver is assigned and active)
+  const showRider = ["accepted", "assigned", "reached_store", "picked_up", "out_for_delivery", "delivered"].includes(order.deliveryStatus);
 
   return res.json({
     success: true,
@@ -896,5 +913,101 @@ export const getCancellationStats = async (req: Request, res: Response) => {
   const total = await Order.countDocuments({ status: "cancelled" });
 
   return res.json({ total, breakdown });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: Get Active Orders
+// ─────────────────────────────────────────────────────────────────────────────
+export const getRestaurantOrders = async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const orders = await Order.find({
+    store: restaurantId,
+    status: { $in: ["pending", "preparing", "ready"] }
+  })
+    .sort({ createdAt: -1 })
+    .populate("customer", "name phone")
+    .populate("assignedDriver", "name phone riderId");
+
+  return res.json(orders);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: Mark Order as Preparing
+// ─────────────────────────────────────────────────────────────────────────────
+export const restaurantMarkPreparing = async (req: Request, res: Response) => {
+  const orderId = req.params.orderId as string;
+  const order = await Order.findById(orderId);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  if (order.status === "preparing") {
+      return res.json({ message: "Order is already in preparing state", order });
+  }
+
+  if (order.status !== "pending") {
+    return res.status(400).json({ message: "Order must be in pending state to prepare" });
+  }
+
+  order.status = "preparing";
+  await order.save();
+  
+  emitOrderStatusUpdate(orderId, {
+      status: order.status,
+      deliveryStatus: order.deliveryStatus,
+      message: "Restaurant has started preparing your order",
+      updatedAt: (order as any).updatedAt,
+  });
+
+  return res.json({ message: "Order marked as preparing", order });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: Verify Pickup OTP & Handover
+// ─────────────────────────────────────────────────────────────────────────────
+export const restaurantVerifyPickup = async (req: Request, res: Response) => {
+  const { orderId } = req.params;
+  const { otp } = req.body;
+
+  const order = await Order.findById(orderId);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  if (order.status !== "ready") {
+    return res.status(400).json({ message: "Order is not ready for pickup" });
+  }
+
+  if (!order.pickupOtp) {
+    return res.status(400).json({ message: "No pickup OTP set for this order" });
+  }
+
+  // 10-Minute Validity Check
+  const now = new Date();
+  const orderUpdatedAt = new Date((order as any).updatedAt);
+  const diffInMinutes = (now.getTime() - orderUpdatedAt.getTime()) / (1000 * 60);
+  
+  if (diffInMinutes > 10) {
+    return res.status(400).json({ message: "OTP has expired. Valid only for 10 minutes from food ready." });
+  }
+
+  if (String(otp) !== String(order.pickupOtp)) {
+    return res.status(400).json({ message: "Invalid pickup OTP" });
+  }
+
+  order.deliveryStatus = "picked_up";
+  await order.save();
+
+  // Credit the restaurant's wallet bucket
+  const restaurant = await Restaurant.findById(order.store);
+  if (restaurant) {
+      restaurant.walletBalance += order.payableAmount;
+      await restaurant.save();
+  }
+
+  emitOrderStatusUpdate(orderId, {
+    status: order.status,
+    deliveryStatus: order.deliveryStatus,
+    message: "Order picked up by rider",
+    updatedAt: (order as any).updatedAt,
+  });
+
+  return res.json({ success: true, message: "OTP verified. Order handed over.", order });
 };
 

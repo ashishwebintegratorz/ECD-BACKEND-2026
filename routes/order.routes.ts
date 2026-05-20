@@ -24,6 +24,9 @@ import {
   getCancellationStats,
   getDeliveryOtp,
   getOrderTracking,
+  getRestaurantOrders,
+  restaurantMarkPreparing,
+  restaurantVerifyPickup,
 } from "../controllers/orders.controller.js";
 
 const router = Router();
@@ -47,7 +50,10 @@ router.put("/update-status/:orderId", jwtAuth, requireRole("admin"), asyncHandle
 router.put("/assign-driver/:orderId", jwtAuth, requireRole("admin"), asyncHandler(assignOrderToDriver));
 
 // ─── Restaurant ───────────────────────────────────────────────────────────────
+router.get("/restaurant/:restaurantId", jwtAuth, requireRole("admin"), asyncHandler(getRestaurantOrders));
+router.patch("/restaurant/prepare/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantMarkPreparing));
 router.patch("/restaurant/ready/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantMarkReady));
+router.post("/restaurant/verify-pickup/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantVerifyPickup));
 router.patch("/restaurant/cancel/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantCancelOrder));
 
 // ─── Driver ───────────────────────────────────────────────────────────────────

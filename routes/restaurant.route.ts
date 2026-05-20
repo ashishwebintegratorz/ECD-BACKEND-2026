@@ -13,6 +13,11 @@ import {
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
+    toggleRestaurantActive,
+    restaurantLogin,
+    getRestaurantProfile,
+    getRestaurantOrderHistory,
+    payoutRestaurant,
 } from "../controllers/restaurant.controller.js";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
@@ -51,8 +56,28 @@ router.get("/details/:slug", asyncHandler(getRestaurantBySlug));
 router.get("/menu/:slug", asyncHandler(getRestaurantMenu));
 
 // ─────────────────────────────────────────────────────────────────
-// ADMIN — Restaurant Management
+// ADMIN & RESTAURANT 
 // ─────────────────────────────────────────────────────────────────
+
+// POST /api/restaurants/login
+router.post("/login", asyncHandler(restaurantLogin));
+
+// GET /api/restaurants/:restaurantId/profile
+router.get("/:restaurantId/profile", jwtAuth, requireRole("admin"), asyncHandler(getRestaurantProfile));
+
+// GET /api/restaurants/:restaurantId/order-history
+router.get("/:restaurantId/order-history", jwtAuth, requireRole("admin"), asyncHandler(getRestaurantOrderHistory));
+
+// POST /api/restaurants/:restaurantId/payout
+router.post("/:restaurantId/payout", jwtAuth, requireRole("admin"), asyncHandler(payoutRestaurant));
+
+// PATCH /api/restaurants/:restaurantId/toggle-active
+router.patch(
+    "/:restaurantId/toggle-active",
+    jwtAuth,
+    requireRole("admin"),
+    asyncHandler(toggleRestaurantActive)
+);
 
 // POST /api/restaurants/admin/create
 router.post(

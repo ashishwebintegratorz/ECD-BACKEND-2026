@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import Restaurant from "../models/Restaurant.model.js";
 import Product from "../models/Product.model.js";
 import Category from "../models/Category.model.js";
+import Order from "../models/Order.model.js";
 import { NotFoundException, BadRequestException } from "../utils/appError.js";
 import { slugify } from "../validators/restaurant.validator.js";
 import { Types } from "mongoose";
@@ -330,9 +331,14 @@ export const createRestaurant = async (req: Request, res: Response) => {
         slug = `${slug}-${Date.now().toString(36)}`;
     }
 
+    // Generate 14-digit key
+    let restaurantKey = '';
+    for (let i = 0; i < 14; i++) restaurantKey += Math.floor(Math.random() * 10).toString();
+
     const restaurant = await Restaurant.create({
         name,
         slug,
+        restaurantKey,
         storeType: req.body.storeType ?? "restaurant",
         description,
         address,
@@ -491,4 +497,163 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
     await restaurant.save();
 
     return res.json({ message: "Menu item deleted" });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: PATCH /api/v1/restaurants/:restaurantId/toggle-active
+// ─────────────────────────────────────────────────────────────────────────────
+export const toggleRestaurantActive = async (req: Request, res: Response) => {
+    const { restaurantId } = req.params;
+    const { isActive } = req.body;
+
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+        return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    restaurant.isActive = isActive !== undefined ? isActive : !restaurant.isActive;
+    await restaurant.save();
+
+    return res.json({
+        success: true,
+        message: `Restaurant is now ${restaurant.isActive ? "online" : "offline"}`,
+        isActive: restaurant.isActive,
+    });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: POST /api/v1/restaurants/login
+// ─────────────────────────────────────────────────────────────────────────────
+export const restaurantLogin = async (req: Request, res: Response) => {
+    const { restaurantKey } = req.body;
+
+    if (!restaurantKey) {
+        return res.status(400).json({ message: "Restaurant key is required" });
+    }
+
+    let restaurant = await Restaurant.findOne({ restaurantKey });
+    
+    // Auto-create for testing purposes
+    if (!restaurant && restaurantKey === "12345678901234") {
+        restaurant = new Restaurant({
+            name: "Test ECD Restaurant",
+            slug: "test-ecd-restaurant-" + Date.now(),
+            restaurantKey: "12345678901234",
+            storeType: "restaurant",
+            status: "active",
+            location: { type: "Point", coordinates: [75.8577, 22.7196] },
+            address: "Test Address, Indore",
+            phone: "9999999999",
+            walletBalance: 0,
+        });
+        await restaurant.save();
+    }
+
+    if (!restaurant) {
+        return res.status(401).json({ message: "Invalid restaurant key" });
+    }
+
+    // For the current MVP setup, we use the test token bypass. 
+    // In production, sign a proper JWT here.
+    return res.json({
+        token: "RESTAURANT_TEST_TOKEN",
+        restaurantId: restaurant._id,
+        name: restaurant.name,
+        logo: restaurant.logo,
+    });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: GET /api/v1/restaurants/:restaurantId/profile
+// ─────────────────────────────────────────────────────────────────────────────
+export const getRestaurantProfile = async (req: Request, res: Response) => {
+    const { restaurantId } = req.params;
+
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+        return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    // Aggregate total completed orders
+    const stats = await Order.aggregate([
+        { 
+            $match: { 
+                store: restaurant._id, 
+                deliveryStatus: { $in: ["picked_up", "delivered"] } 
+            } 
+        },
+        { 
+            $group: { 
+                _id: null, 
+                totalOrders: { $sum: 1 }
+            } 
+        }
+    ]);
+
+    const totalOrders = stats[0]?.totalOrders || 0;
+    const totalRevenue = restaurant.walletBalance; // Real-time bucket balance
+
+    return res.json({
+        success: true,
+        restaurant: {
+            id: restaurant._id,
+            name: restaurant.name,
+            logo: restaurant.logo,
+            coverImage: restaurant.coverImage,
+            restaurantKey: restaurant.restaurantKey,
+            isActive: restaurant.isActive,
+        },
+        totalOrders,
+        totalRevenue,
+    });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: GET /api/v1/restaurants/:restaurantId/order-history
+// ─────────────────────────────────────────────────────────────────────────────
+export const getRestaurantOrderHistory = async (req: Request, res: Response) => {
+    const { restaurantId } = req.params;
+
+    const orders = await Order.find({
+        store: restaurantId,
+        deliveryStatus: { $in: ["picked_up", "delivered"] },
+    })
+    .sort({ createdAt: -1 })
+    .select("orderNumber payableAmount status deliveryStatus createdAt")
+    .lean();
+
+    return res.json({
+        success: true,
+        orders,
+    });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: POST /api/v1/restaurants/:restaurantId/payout
+// ─────────────────────────────────────────────────────────────────────────────
+export const payoutRestaurant = async (req: Request, res: Response) => {
+    const { restaurantId } = req.params;
+    const { amount } = req.body;
+
+    if (!amount || amount <= 0) {
+        return res.status(400).json({ message: "Invalid payout amount" });
+    }
+
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+        return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    if (restaurant.walletBalance < amount) {
+        return res.status(400).json({ message: "Insufficient bucket balance for this payout" });
+    }
+
+    restaurant.walletBalance -= amount;
+    await restaurant.save();
+
+    return res.json({
+        success: true,
+        message: `Successfully paid out ₹${amount}`,
+        newBalance: restaurant.walletBalance,
+    });
 };
