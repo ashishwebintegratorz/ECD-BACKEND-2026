@@ -8,6 +8,7 @@ import { HTTPSTATUS } from "./config/http.config.js";
 import { asyncHandler } from "./middlewares/asyncHandler.middleware.js";
 import userAuthRoutes from "./routes/userAuth.routes.js";
 import driverAuthRoutes from "./routes/driverAuth.routes.js";
+import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import categoryRoutes from "./routes/categories.routes.js";
@@ -90,6 +91,7 @@ app.get(
 // Auth
 app.use(`${BASE_PATH}/auth/user`, otpLimiter, userAuthRoutes);
 app.use(`${BASE_PATH}/auth/driver`, otpLimiter, driverAuthRoutes);
+app.use(`${BASE_PATH}/auth/admin`, otpLimiter, authRoutes);
 app.use(`${BASE_PATH}/user`, userRoutes);
 app.use(`${BASE_PATH}/admin`, adminRoutes);
 app.use(`${BASE_PATH}/categories`, categoryRoutes);

@@ -338,13 +338,19 @@ export const createRestaurant = async (req: Request, res: Response) => {
         slug = `${slug}-${Date.now().toString(36)}`;
     }
 
-    // Generate 14-digit key
-    let restaurantKey = '';
-    for (let i = 0; i < 14; i++) restaurantKey += Math.floor(Math.random() * 10).toString();
+    // Generate 14-digit key if not provided
+    let restaurantKey = req.body.restaurantKey;
+    if (!restaurantKey) {
+        restaurantKey = '';
+        for (let i = 0; i < 14; i++) restaurantKey += Math.floor(Math.random() * 10).toString();
+    }
 
-    // Generate 14-digit custom ID
-    let restaurantId = '';
-    for (let i = 0; i < 14; i++) restaurantId += Math.floor(Math.random() * 10).toString();
+    // Generate 14-digit custom ID if not provided
+    let restaurantId = req.body.restaurantId;
+    if (!restaurantId) {
+        restaurantId = '';
+        for (let i = 0; i < 14; i++) restaurantId += Math.floor(Math.random() * 10).toString();
+    }
 
     const restaurant = await Restaurant.create({
         name,
@@ -629,6 +635,7 @@ export const getRestaurantProfile = async (req: Request, res: Response) => {
             coverImage: restaurant.coverImage,
             restaurantKey: restaurant.restaurantKey,
             isActive: restaurant.isActive,
+            menu: restaurant.menu,
         },
         totalOrders,
         totalRevenue,
