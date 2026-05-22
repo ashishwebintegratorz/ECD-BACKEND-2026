@@ -24,5 +24,5 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
 
   return res
     .status(HTTPSTATUS.INTERNAL_SERVER_ERROR)
-    .json({ message: "Internal Server Error", error: (err as any)?.message });
+    .json({ message: `Internal Server Error: ${(err as any)?.message || String(err)}`, error: (err as any)?.message });
 };
