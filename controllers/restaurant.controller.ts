@@ -139,7 +139,7 @@ export const searchRestaurants = async (req: Request, res: Response) => {
             { description: { $regex: regex } },
         ],
     })
-        .select("name slug description address location logo coverImage categories adminRating featured orderCount")
+        .select("name slug description address location logo coverImage categories adminRating featured orderCount menu")
         .sort({ featured: -1, adminRating: -1, orderCount: -1 })
         .limit(50)
         .lean();
