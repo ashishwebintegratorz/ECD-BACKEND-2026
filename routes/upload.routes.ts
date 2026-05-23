@@ -10,7 +10,7 @@ const router = Router();
 // Configure multer for memory storage
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Upload image (restricted to admin, but could be adjusted based on needs)
-router.post("/", jwtAuth, requireRole("admin"), upload.single("image"), asyncHandler(uploadImage));
+// Upload image (accessible to any authenticated user)
+router.post("/", jwtAuth, upload.single("image"), asyncHandler(uploadImage));
 
 export default router;

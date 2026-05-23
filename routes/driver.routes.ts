@@ -16,7 +16,8 @@ import { getDriverSummary, getMonthlyPerformance } from "../controllers/driverPe
 import { 
     getActiveOrder, 
     getOrderHistory, 
-    confirmPaymentReceipt 
+    confirmPaymentReceipt,
+    completeDeliveryWithOTP
 } from "../controllers/driverOrder.controller.js";
 import { 
     getWalletSummary, 
@@ -51,6 +52,7 @@ router.get("/performance/monthly", jwtAuth, requireRole("driver"), getMonthlyPer
 router.get("/orders/active", jwtAuth, requireRole("driver"), getActiveOrder);
 router.get("/orders/history", jwtAuth, requireRole("driver"), getOrderHistory);
 router.patch("/orders/confirm-payment", jwtAuth, requireRole("driver"), checkOnboarding, confirmPaymentReceipt);
+router.post("/orders/complete", jwtAuth, requireRole("driver"), checkOnboarding, completeDeliveryWithOTP);
 
 // Wallet & Withdrawals
 router.get("/wallet", jwtAuth, requireRole("driver"), getWalletSummary);

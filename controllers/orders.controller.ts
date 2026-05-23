@@ -61,25 +61,17 @@ export const createOrder = async (req: Request, res: Response) => {
   const userId = (req as any).user.id;
   const { addressId, paymentMethod, restaurantId, couponCode, address: rawAddress } = req.body;
 
-  // Use dummy restaurant ID for testing if missing
-  const effectiveRestaurantId = restaurantId || '69ef47bf77c29363016a95e5'; 
+  // Require real restaurant ID
+  if (!restaurantId) {
+    return res.status(400).json({ message: "Restaurant ID is required" });
+  }
 
   let addressDoc;
   if (addressId) {
-    if (addressId === '662b6a9c1234567890abcdef' || addressId === '69e22638dd7aa8136ea91774') {
-      addressDoc = {
-        _id: addressId,
-        fullAddress: 'Dummy Address, Indore',
-        location: { coordinates: [75.8577, 22.7196] },
-        phone: '9876543210',
-        label: 'Dummy'
-      };
-    } else {
-      try {
-        addressDoc = await Address.findOne({ _id: addressId, user: userId });
-      } catch (e) {
-        return res.status(400).json({ message: "Invalid Address ID format" });
-      }
+    try {
+      addressDoc = await Address.findOne({ _id: addressId, user: userId });
+    } catch (e) {
+      return res.status(400).json({ message: "Invalid Address ID format" });
     }
   } else if (rawAddress) {
     // Use raw address object sent from frontend (e.g., current location)
@@ -93,8 +85,7 @@ export const createOrder = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Location coordinates are required" });
 
   const [lng, lat] = location.coordinates;
-  // Skip Indore check for dummy/raw address for now or keep it if coordinates exist
-  if (addressId !== '662b6a9c1234567890abcdef' && !isWithinIndore(lat, lng))
+  if (!isWithinIndore(lat, lng))
     return res.status(400).json({ message: "Delivery is only available in Indore" });
 
   const cart = await Cart.findOne({ user: userId });
@@ -124,7 +115,7 @@ export const createOrder = async (req: Request, res: Response) => {
   const deliveryCharge = calculateDeliveryCharge(totalAmount);
   
   // ── Fetch store to check type (Restaurant/Grocery) for GST ───────────────
-  const store = await Restaurant.findById(effectiveRestaurantId);
+  const store = await Restaurant.findById(restaurantId);
   const isRestaurant = store?.storeType === "restaurant";
 
   // ── Coupon validation ─────────────────────────────────────────────────────
@@ -132,7 +123,7 @@ export const createOrder = async (req: Request, res: Response) => {
   let appliedCoupon: { couponId: string; code: string; discountAmount: number } | undefined;
   
   if (couponCode) {
-    const couponResult = await validateCoupon(couponCode, userId, effectiveRestaurantId, totalAmount);
+    const couponResult = await validateCoupon(couponCode, userId, restaurantId, totalAmount);
     if (!couponResult.ok)
       return res.status(400).json({ message: couponResult.message });
     
@@ -152,7 +143,7 @@ export const createOrder = async (req: Request, res: Response) => {
   console.log("Creating Order with data:", JSON.stringify({
     orderNumber: `ORD-${Date.now()}`,
     customer: userId,
-    store: effectiveRestaurantId,
+    store: restaurantId,
     itemsCount: cart.items.length,
     totalAmount,
     payableAmount,
@@ -164,7 +155,7 @@ export const createOrder = async (req: Request, res: Response) => {
     order = await Order.create({
       orderNumber: `ORD-${Date.now()}`,
       customer: userId,
-      store: effectiveRestaurantId,   // generic store ref (restaurant or grocery)
+      store: restaurantId,   // generic store ref (restaurant or grocery)
       items: cart.items.map((i) => ({
         product: i.product,
         name: i.name || "Item",
@@ -202,9 +193,9 @@ export const createOrder = async (req: Request, res: Response) => {
     });
     await confirmOrderLogic(order._id.toString());
 
-    // Auto-generate delivery OTP for customer
+    // Auto-generate delivery OTP for order
     const deliveryOtp = generateDeliveryOtp();
-    await User.findByIdAndUpdate(userId, { deliveryOtp });
+    await Order.findByIdAndUpdate(order._id, { deliveryOTP: deliveryOtp });
 
     const updatedOrder = await Order.findById(order._id);
     // Push: order placed
@@ -283,11 +274,11 @@ export const verifyPayment = async (req: Request, res: Response) => {
 
   await confirmOrderLogic(transaction.order.toString());
 
-  // Auto-generate delivery OTP for customer after Razorpay payment
+  // Auto-generate delivery OTP for order after Razorpay payment
   const confirmedOrder = await Order.findById(transaction.order);
   if (confirmedOrder) {
     const deliveryOtp = generateDeliveryOtp();
-    await User.findByIdAndUpdate(confirmedOrder.customer, { deliveryOtp });
+    await Order.findByIdAndUpdate(confirmedOrder._id, { deliveryOTP: deliveryOtp });
   }
 
   return res.json({ success: true });
@@ -308,6 +299,7 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Order must be in preparing state" });
 
   order.status = "ready";
+  order.readyAt = new Date();
   order.pickupOtp = generateDeliveryOtp(); // Reuse the same 4-digit helper
   await order.save();
 
@@ -547,11 +539,15 @@ export const driverDeclineOrder = async (req: Request, res: Response) => {
   emitOrderStatusUpdate(orderId, {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
-    message: "Driver declined. Please re-assign a driver.",
+    message: "Driver declined. Finding next nearest driver...",
     updatedAt: (order as any).updatedAt,
   });
 
-  return res.json({ message: "Order declined. Admin will re-assign a driver.", order });
+  // Re-assign to next nearest driver logic automatically
+  const { assignToNearestDriver } = await import("../services/assignment.service.js");
+  assignToNearestDriver(orderId, [driverId]);
+
+  return res.json({ message: "Order declined. Finding next nearest driver...", order });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -714,6 +710,7 @@ export const getOrderTracking = async (req: Request, res: Response) => {
   const order = await Order.findOne({ _id: orderId, customer: userId })
     .populate("store", "name location address phone logo")
     .populate("assignedDriver", "name phone avatar")
+    .populate("customer", "deliveryOtp")
     .lean();
 
   if (!order) return res.status(404).json({ message: "Order not found" });
@@ -751,6 +748,7 @@ export const getOrderTracking = async (req: Request, res: Response) => {
       itemsCount: order.items.length,
       store: order.store,
       assignedDriver: showRider ? order.assignedDriver : null,
+      deliveryOTP: order.deliveryOTP,
     },
     currentStep,
     timeline,

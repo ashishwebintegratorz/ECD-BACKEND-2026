@@ -61,7 +61,11 @@ export function createAuthTokens(user: IUser) {
     name: user.name,
     role: user.role,
     isVerified: user.isVerified,
+    avatar: user.avatar,
     createdAt: user.createdAt,
+    upi: user.upi,
+    isOnline: user.isOnline,
+    isReturning: user.isReturning,
   };
 
   return { accessToken, refreshToken, user: safeUser };

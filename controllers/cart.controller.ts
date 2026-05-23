@@ -29,15 +29,7 @@ const validateProductVariant = async (
   let product = await Product.findById(productId);
   
   if (!product) {
-    // Return dummy product for testing if not found
-    return {
-      product: {
-        _id: productId,
-        name: "Dummy Product",
-        variants: [{ price: 100, stock: 10, images: [""] }]
-      } as any,
-      variant: { price: 100, stock: 10, images: [""] } as any
-    };
+    throw new NotFoundException("Product not found");
   }
 
   const variant = product.variants?.[variantIndex || 0];

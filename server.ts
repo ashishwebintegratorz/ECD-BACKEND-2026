@@ -5,6 +5,7 @@ import { config } from "./config/app.config.js";
 import connectDatabase from "./config/database.config.js";
 import { initOrderSocket, setIo } from "./socket/orderSocket.js";
 import { registerPayoutCrons } from "./services/payout.cron.js";
+import { registerOrderCrons } from "./services/order.cron.js";
 
 const PORT = Number(config.PORT) || 5000;
 
@@ -23,6 +24,7 @@ async function start() {
   setIo(io);
   initOrderSocket(io);
   registerPayoutCrons(); // weekly restaurant + monthly driver payouts
+  registerOrderCrons();
 
   server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT} in ${config.NODE_ENV} mode`);

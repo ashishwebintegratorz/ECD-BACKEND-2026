@@ -134,7 +134,7 @@ export const getDriverProfile = asyncHandler(async (req: Request, res: Response)
     const driver = await UserModel.findById(user._id).select("-pinHash");
     if (!driver) return res.status(404).json({ message: "Driver not found" });
 
-    return res.json(driver);
+    return res.json({ user: driver });
 });
 
 /**

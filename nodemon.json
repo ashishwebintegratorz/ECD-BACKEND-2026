@@ -2,5 +2,6 @@
   "watch": ["."],
   "ext": "ts,json",
   "ignore": ["dist/*", "node_modules/*"],
-  "exec": "node --import tsx ./server.ts"
+  "exec": "node --import tsx ./server.ts",
+  "signal": "SIGINT"
 }

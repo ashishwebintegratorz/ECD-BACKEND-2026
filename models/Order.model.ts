@@ -61,7 +61,9 @@ export interface IOrder extends Document {
   cancellationLog: ICancellationLog[];
   coupon?: { couponId: Types.ObjectId; code: string; discountAmount: number }; // applied coupon
   pickupOtp?: string;            // OTP given by restaurant to rider for pickup
+  deliveryOTP?: string;          // OTP given by customer to rider for delivery
   acceptedAt?: Date;
+  readyAt?: Date;
   deliveredAt?: Date;
   assignmentTimeoutAt?: Date;
   meta?: Record<string, any>;
@@ -117,7 +119,9 @@ const OrderSchema = new Schema<IOrder>(
       discountAmount: { type: Number },
     },
     pickupOtp: { type: String },
+    deliveryOTP: { type: String },
     acceptedAt: { type: Date },
+    readyAt: { type: Date },
     deliveredAt: { type: Date },
     assignmentTimeoutAt: { type: Date },
     meta: { type: Schema.Types.Mixed },

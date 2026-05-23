@@ -14,6 +14,7 @@ router.get("/me", jwtAuth, (req, res) => {
             name: user.name,
             role: user.role,
             isVerified: user.isVerified,
+            avatar: user.avatar,
             createdAt: user.createdAt,
         },
     });

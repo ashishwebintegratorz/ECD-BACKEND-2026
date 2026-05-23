@@ -17,8 +17,12 @@ export const startAssignmentFlow = async (orderId: string, driverId: string) => 
 
     const timeout = new Date(Date.now() + ASSIGNMENT_TIMEOUT_MS);
     
+    // Generate 4-digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
     order.assignedDriver = driverId as any;
     order.deliveryStatus = "driver_notified";
+    order.deliveryOTP = otp;
     order.assignmentTimeoutAt = timeout;
     await order.save();
 
@@ -106,13 +110,14 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
         if (!activeOrder) {
             // Driver is free, get their location
             const loc = await DriverLocation.findOne({ driver: driver._id });
-            if (loc?.location?.coordinates) {
-                const [lng, lat] = loc.location.coordinates;
-                const distance = haversineDistance(lat, lng, storeLat, storeLng);
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    nearestDriverId = driver._id.toString();
-                }
+            
+            // FALLBACK for testing: if no location found, assume distance is 1km so popup still works
+            const [lng, lat] = loc?.location?.coordinates || [storeLng + 0.01, storeLat + 0.01]; 
+            const distance = haversineDistance(lat, lng, storeLat, storeLng);
+            
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestDriverId = driver._id.toString();
             }
         }
     }
@@ -122,5 +127,15 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
         await startAssignmentFlow(orderId, nearestDriverId);
     } else {
         console.log(`[Auto-Assign] No available drivers for order ${orderId}`);
+        
+        // Update database so subsequent fetches know there are no riders
+        await Order.findByIdAndUpdate(orderId, { deliveryStatus: "driver_not_found" });
+
+        // Notify restaurant that no driver was found instead of spinning forever
+        emitOrderStatusUpdate(orderId, {
+            status: "ready", // keep it ready so they can try again
+            deliveryStatus: "driver_not_found",
+            message: "No available riders found. Please try assigning again.",
+        });
     }
 };

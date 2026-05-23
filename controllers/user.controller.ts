@@ -11,8 +11,9 @@ export const me = asyncHandler(async (req: Request, res: Response) => {
 export const updateProfile = asyncHandler(
   async (req: Request, res: Response) => {
     const user = (req as any).user;
-    const { name } = req.body;
-    user.name = name || user.name;
+    const { name, avatar } = req.body;
+    if (name) user.name = name;
+    if (avatar) user.avatar = avatar;
     await user.save();
     return res.json({ user });
   }

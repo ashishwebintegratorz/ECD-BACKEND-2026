@@ -9,7 +9,7 @@ import { BadRequestException, NotFoundException } from "../utils/appError.js";
  * GET: Current active order for the driver
  */
 export const getActiveOrder = asyncHandler(async (req: Request, res: Response) => {
-    const driverId = (req as any).user.id;
+    const driverId = (req as any).user._id;
     const order = await Order.findOne({
         assignedDriver: driverId,
         deliveryStatus: { $in: ["accepted", "assigned", "out_for_delivery", "reached_store", "driver_notified"] }
@@ -67,7 +67,7 @@ export const getActiveOrder = asyncHandler(async (req: Request, res: Response) =
  * GET: Order history (Completed and Cancelled)
  */
 export const getOrderHistory = asyncHandler(async (req: Request, res: Response) => {
-    const driverId = (req as any).user.id;
+    const driverId = (req as any).user._id;
     const { status } = req.query; // 'delivered' or 'cancelled'
 
     const filter: any = { assignedDriver: driverId };
@@ -121,7 +121,7 @@ export const getOrderHistory = asyncHandler(async (req: Request, res: Response) 
  * PATCH: Confirm manual payment receipt (COD)
  */
 export const confirmPaymentReceipt = asyncHandler(async (req: Request, res: Response) => {
-    const driverId = (req as any).user.id;
+    const driverId = (req as any).user._id;
     const { orderId } = req.body;
 
     const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
@@ -136,4 +136,37 @@ export const confirmPaymentReceipt = asyncHandler(async (req: Request, res: Resp
     await order.save();
 
     return res.json({ message: "Payment confirmed successfully", order });
+});
+
+/**
+ * PATCH: Complete Delivery with OTP
+ */
+export const completeDeliveryWithOTP = asyncHandler(async (req: Request, res: Response) => {
+    const driverId = (req as any).user._id;
+    const { orderId, otp } = req.body;
+
+    if (!otp) throw new BadRequestException("OTP is required to complete delivery");
+
+    const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
+    if (!order) throw new NotFoundException("Order not found or not assigned to you");
+
+    if (order.deliveryStatus === "delivered") {
+        throw new BadRequestException("Order is already delivered");
+    }
+
+    if (order.deliveryOTP !== otp) {
+        throw new BadRequestException("Invalid Delivery OTP");
+    }
+
+    order.deliveryStatus = "delivered";
+    order.deliveredAt = new Date();
+    order.statusHistory.push({
+        status: "delivered",
+        timestamp: new Date(),
+        note: "Delivery completed with OTP verification by driver"
+    });
+
+    await order.save();
+
+    return res.json({ message: "Delivery completed successfully", order });
 });
