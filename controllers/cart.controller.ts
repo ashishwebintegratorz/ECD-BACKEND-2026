@@ -22,17 +22,32 @@ const getOrCreateCart = async (userId: string) => {
 // ---------------------------------
 // 🔍 Helper: Validate Product + Variant
 // ---------------------------------
+import Restaurant from "../models/Restaurant.model.js";
+
 const validateProductVariant = async (
   productId: string,
   variantIndex?: number
 ) => {
-  let product = await Product.findById(productId);
+  let product: any = await Product.findById(productId);
+  let variant: any;
   
   if (!product) {
+    // Fallback: Check if it's a restaurant menu item
+    const restaurant = await Restaurant.findOne({ "menu._id": productId });
+    if (restaurant) {
+      const menuItem: any = restaurant.menu.find((m: any) => m._id?.toString() === productId.toString());
+      if (menuItem) {
+        if (!menuItem.isAvailable) throw new BadRequestException("Menu item is currently unavailable");
+        return {
+          product: { _id: menuItem._id, name: menuItem.name },
+          variant: { price: menuItem.price, stock: 999, images: [menuItem.image] }
+        };
+      }
+    }
     throw new NotFoundException("Product not found");
   }
 
-  const variant = product.variants?.[variantIndex || 0];
+  variant = product.variants?.[variantIndex || 0];
 
   if (!variant)
     throw new BadRequestException("Invalid product variant selected");

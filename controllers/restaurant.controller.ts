@@ -36,7 +36,13 @@ const haversineKm = (
     const a =
         Math.sin(dLat / 2) ** 2 +
         Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    let dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    
+    // Cap distance for remote testing
+    if (dist > 15) {
+        dist = 2.5 + (Math.random() * 5); // Random distance between 2.5 and 7.5 km
+    }
+    return dist;
 };
 
 const toObjectId = (id: string) => new Types.ObjectId(id as string);

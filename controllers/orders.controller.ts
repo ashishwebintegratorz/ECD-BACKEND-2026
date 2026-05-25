@@ -27,7 +27,7 @@ import {
 import { startAssignmentFlow, assignToNearestDriver } from "../services/assignment.service.js";
 import { updatePerformanceOnDelivery } from "../services/driverPerformance.service.js";
 import Address from "../models/Address.model.js";
-import { calculateDeliveryCharge, isWithinIndore } from "../utils/delivery.utils.js";
+import { calculateDeliveryCharge, isWithinIndore, haversineDistance } from "../utils/delivery.utils.js";
 import Restaurant from "../models/Restaurant.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
 
@@ -140,6 +140,18 @@ export const createOrder = async (req: Request, res: Response) => {
   const gst = isRestaurant ? Math.round(taxableAmount * 0.05) : 0;
   const payableAmount = taxableAmount + deliveryCharge + gst;
 
+  // ── Earnings Calculations ─────────────────────────────────────────────────
+  let driverEarnings = 0;
+  if (store && addressDoc.location?.coordinates && store.location?.coordinates) {
+    const [custLng, custLat] = addressDoc.location.coordinates;
+    const [storeLng, storeLat] = store.location.coordinates;
+    const distanceKm = haversineDistance(storeLat, storeLng, custLat, custLng);
+    driverEarnings = Math.max(15, Math.ceil(distanceKm * 5)); // 5 rs per km, min 15 rs
+  }
+
+  // Calculate 50% deal for the restaurant on the food price
+  const restaurantEarnings = Math.round(taxableAmount * 0.50);
+
   console.log("Creating Order with data:", JSON.stringify({
     orderNumber: `ORD-${Date.now()}`,
     customer: userId,
@@ -147,6 +159,8 @@ export const createOrder = async (req: Request, res: Response) => {
     itemsCount: cart.items.length,
     totalAmount,
     payableAmount,
+    driverEarnings,
+    restaurantEarnings,
     addressSnapshot
   }, null, 2));
 
@@ -172,6 +186,8 @@ export const createOrder = async (req: Request, res: Response) => {
       address: addressSnapshot,
       status: "pending",
       deliveryStatus: "pending",
+      driverEarnings,
+      restaurantEarnings,
       ...(appliedCoupon && { coupon: appliedCoupon }),
     });
   } catch (err: any) {
@@ -213,7 +229,38 @@ export const createOrder = async (req: Request, res: Response) => {
     });
   }
 
-  // Razorpay flow
+  // If frontend already processed mock payment and sent a paymentId
+  if (req.body.paymentId) {
+    await PaymentTransaction.create({
+      order: order._id,
+      provider: paymentMethod || "mock",
+      providerPaymentId: req.body.paymentId,
+      amount: payableAmount,
+      status: "success",
+    });
+    await confirmOrderLogic(order._id.toString());
+
+    // Auto-generate delivery OTP for order
+    const deliveryOtp = generateDeliveryOtp();
+    await Order.findByIdAndUpdate(order._id, { deliveryOTP: deliveryOtp });
+
+    const updatedOrder = await Order.findById(order._id);
+    notifyOrderPlaced(userId, order.orderNumber).catch(() => { });
+    
+    return res.json({
+      order: updatedOrder,
+      mockPayment: true,
+      summary: {
+        totalAmount,
+        deliveryCharge,
+        gst,
+        totalDiscount,
+        payableAmount
+      }
+    });
+  }
+
+  // Real Razorpay flow
   const razorpayOrder = await razorpay.orders.create({
     amount: Math.round(payableAmount * 100),
     currency: "INR",
@@ -334,8 +381,8 @@ export const restaurantCancelOrder = async (req: Request, res: Response) => {
   const order = await Order.findById(orderId);
   if (!order) return res.status(404).json({ message: "Order not found" });
 
-  if (order.status !== "preparing")
-    return res.status(400).json({ message: "Order can only be cancelled while preparing" });
+  if (!["pending", "preparing"].includes(order.status))
+    return res.status(400).json({ message: "Order can only be cancelled while pending or preparing" });
 
   order.status = "cancelled";
   order.cancelledBy = "restaurant";
@@ -717,15 +764,17 @@ export const getOrderTracking = async (req: Request, res: Response) => {
 
   // 1. Calculate current step and timeline
   let currentStep = 0; // Order Placed
-  if (["preparing", "ready"].includes(order.status)) currentStep = 1;
-  if (["picked_up", "out_for_delivery"].includes(order.deliveryStatus)) currentStep = 2;
-  if (order.deliveryStatus === "delivered") currentStep = 3;
+  if (["preparing", "ready"].includes(order.status) || ["accepted", "reached_store"].includes(order.deliveryStatus)) currentStep = 1;
+  if (["picked_up"].includes(order.deliveryStatus) || order.status === "picked_up") currentStep = 2;
+  if (order.deliveryStatus === "out_for_delivery") currentStep = 3;
+  if (order.deliveryStatus === "delivered" || order.status === "delivered") currentStep = 4;
 
   const timeline = [
     { status: "Order Placed", completed: true, time: order.createdAt },
     { status: "Preparing", completed: currentStep >= 1, time: currentStep >= 1 ? (order as any).updatedAt : null },
-    { status: "On the Way", completed: currentStep >= 2, time: currentStep >= 2 ? (order as any).updatedAt : null },
-    { status: "Delivered", completed: currentStep >= 3, time: currentStep >= 3 ? (order as any).updatedAt : null },
+    { status: "Picked Up", completed: currentStep >= 2, time: currentStep >= 2 ? (order as any).updatedAt : null },
+    { status: "On the Way", completed: currentStep >= 3, time: currentStep >= 3 ? (order as any).updatedAt : null },
+    { status: "Delivered", completed: currentStep >= 4, time: currentStep >= 4 ? (order as any).updatedAt : null },
   ];
 
   // 2. Cancellation window (5 minutes)
@@ -978,20 +1027,14 @@ export const restaurantVerifyPickup = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "No pickup OTP set for this order" });
   }
 
-  // 10-Minute Validity Check
-  const now = new Date();
-  const orderUpdatedAt = new Date((order as any).updatedAt);
-  const diffInMinutes = (now.getTime() - orderUpdatedAt.getTime()) / (1000 * 60);
-  
-  if (diffInMinutes > 10) {
-    return res.status(400).json({ message: "OTP has expired. Valid only for 10 minutes from food ready." });
-  }
+  // Note: Removed 10-minute expiry because driver might take longer to arrive
 
   if (String(otp) !== String(order.pickupOtp)) {
     return res.status(400).json({ message: "Invalid pickup OTP" });
   }
 
   order.deliveryStatus = "picked_up";
+  order.status = "picked_up";
   await order.save();
 
   // Credit the restaurant's wallet bucket

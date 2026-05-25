@@ -130,6 +130,28 @@ export const toggleUserBlock = async (req: Request, res: Response) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: Update user details (documents, status, isVerified)
+// ─────────────────────────────────────────────────────────────────────────────
+export const updateUserDetails = async (req: Request, res: Response) => {
+    const { status, isVerified, documents } = req.body;
+    
+    const updateData: any = {};
+    if (status) updateData.status = status;
+    if (typeof isVerified === "boolean") updateData.isVerified = isVerified;
+    if (documents) updateData.documents = documents;
+
+    const user = await User.findByIdAndUpdate(
+        req.params.id,
+        { $set: updateData },
+        { new: true }
+    ).select("-pinHash");
+
+    if (!user) throw new NotFoundException("User not found");
+
+    return res.json({ message: "User details updated successfully", user });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ADMIN: Revenue stats by date range
 // ?from=2026-01-01&to=2026-12-31
 // ─────────────────────────────────────────────────────────────────────────────

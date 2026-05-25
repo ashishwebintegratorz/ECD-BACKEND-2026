@@ -47,7 +47,7 @@ export const startAssignmentFlow = async (orderId: string, driverId: string) => 
         restaurantAddress: restaurant?.address || "Store Address",
         distanceToStore: `${distance} km`,
         deliveryAddress: typeof order.address === "string" ? order.address : (order.address?.address || "Customer Address"),
-        estimatedEarnings: order.deliveryCharge || 30,
+        estimatedEarnings: order.driverEarnings || 30,
         timeoutAt: timeout,
     });
 

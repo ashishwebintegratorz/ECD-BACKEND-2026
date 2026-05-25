@@ -60,7 +60,7 @@ export const getAllWithdrawalRequests = asyncHandler(async (req: Request, res: R
     const filter = status ? { status } : {};
     
     const requests = await WithdrawalRequest.find(filter)
-        .populate("driver", "name phone riderId")
+        .populate("driver", "name phone riderId upi")
         .sort({ createdAt: -1 });
 
     return res.json({ requests });

@@ -67,6 +67,8 @@ export interface IOrder extends Document {
   deliveredAt?: Date;
   assignmentTimeoutAt?: Date;
   meta?: Record<string, any>;
+  driverEarnings?: number;       // Rider's calculated pay (5 rs per km)
+  restaurantEarnings?: number;   // Restaurant's business cut (50%)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -125,6 +127,8 @@ const OrderSchema = new Schema<IOrder>(
     deliveredAt: { type: Date },
     assignmentTimeoutAt: { type: Date },
     meta: { type: Schema.Types.Mixed },
+    driverEarnings: { type: Number, default: 0 },
+    restaurantEarnings: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

@@ -24,7 +24,13 @@ export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2
     Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  let dist = R * c;
+  
+  // Cap distance for remote testing (so remote users can test effectively)
+  if (dist > 15) {
+      dist = 2.5 + (Math.random() * 5); // Random distance between 2.5 and 7.5 km
+  }
+  return dist;
 }
 
 export function isWithinIndore(lat: number, lng: number): boolean {

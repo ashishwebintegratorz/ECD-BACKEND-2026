@@ -66,6 +66,7 @@ export function createAuthTokens(user: IUser) {
     upi: user.upi,
     isOnline: user.isOnline,
     isReturning: user.isReturning,
+    riderId: user.riderId,
   };
 
   return { accessToken, refreshToken, user: safeUser };

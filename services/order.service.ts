@@ -179,6 +179,7 @@ export const confirmOrderLogic = async (orderId: string) => {
             orderNumber: order.orderNumber,
             items: order.items,
             totalAmount: order.totalAmount,
+            restaurantEarnings: order.restaurantEarnings,
             address: order.address,
             message: "New order — start processing now",
         });

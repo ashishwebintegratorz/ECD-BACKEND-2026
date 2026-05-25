@@ -160,7 +160,8 @@ export const completeDeliveryWithOTP = asyncHandler(async (req: Request, res: Re
 
     order.deliveryStatus = "delivered";
     order.deliveredAt = new Date();
-    order.statusHistory.push({
+    (order as any).statusHistory = (order as any).statusHistory || [];
+    (order as any).statusHistory.push({
         status: "delivered",
         timestamp: new Date(),
         note: "Delivery completed with OTP verification by driver"

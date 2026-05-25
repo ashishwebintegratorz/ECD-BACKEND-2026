@@ -1,4 +1,4 @@
-import axios from "axios";
+import { imagekit } from "../config/imagekit.js";
 
 /**
  * Uploads a file buffer or base64 string to ImageKit
@@ -12,39 +12,23 @@ export const uploadToImageKit = async (
     folder: string
 ): Promise<string> => {
     try {
-        const privateKey = process.env.IMAGEKIT_PRIVATE_KEY || "";
-        const authHeader = Buffer.from(privateKey + ":").toString("base64");
-
-        // Support both raw buffers/strings and full Multer file objects
         let rawFile = file;
         if (file && typeof file === "object" && file.buffer) {
             rawFile = file.buffer;
         }
 
-        const fileData = Buffer.isBuffer(rawFile) ? rawFile.toString("base64") : rawFile;
-
-        // User requested debug logs
-        console.log("UPLOAD FILE DATA:", file);
-        console.log("BUFFER EXISTS:", !!(file as any)?.buffer || Buffer.isBuffer(file));
-        console.log("ORIGINAL NAME:", (file as any)?.originalname);
-
-        const response = await axios.post("https://upload.imagekit.io/api/v1/files/upload", {
-            file: fileData,
-            fileName: fileName,
-            folder: folder
-        }, {
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Basic ${authHeader}`
-            }
+        const response = await imagekit.upload({
+            file: rawFile, // required
+            fileName: fileName, // required
+            folder: folder, // optional
         });
 
-        if (response.data && response.data.url) {
-            return response.data.url;
+        if (response && response.url) {
+            return response.url;
         }
         throw new Error("Failed to upload image to ImageKit");
     } catch (error: any) {
-        console.error("❌ ImageKit Upload Error:", error?.response?.data || error.message);
-        throw new Error(error?.response?.data?.message || "ImageKit upload failed");
+        console.error("❌ ImageKit Upload Error:", error?.message || error);
+        throw new Error(error?.message || "ImageKit upload failed");
     }
 };
