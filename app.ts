@@ -36,10 +36,10 @@ const BASE_PATH = config.BASE_PATH;
 
 // ── Rate Limiters ─────────────────────────────────────────────────────────────
 
-// Strict: OTP endpoints — max 5 requests per 15 minutes per IP
+// Strict: OTP endpoints — max 50 requests per 15 minutes per IP for dev
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 50,
   message: { message: "Too many OTP requests. Please try again after 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,

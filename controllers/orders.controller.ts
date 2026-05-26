@@ -712,6 +712,7 @@ export const getMyOrders = async (req: Request, res: Response) => {
     .sort({ createdAt: -1 })
     .populate("paymentTransaction")
     .populate("store", "name slug logo address")
+    .populate("assignedDriver", "name phone avatar")
     .lean();
 
   const now = new Date();
@@ -729,7 +730,8 @@ export const getMyOrders = async (req: Request, res: Response) => {
     const isCancelledOrFailed = ["cancelled", "failed"].includes(o.status) || 
                                 ["cancelled", "failed"].includes(o.deliveryStatus);
     const isOld = new Date(o.createdAt) <= threeHoursAgo;
-    return isDelivered || isCancelledOrFailed || isOld;
+    if (isCancelledOrFailed) return false;
+    return isDelivered || isOld;
   });
   
   const cancelled = orders.filter((o) => 
