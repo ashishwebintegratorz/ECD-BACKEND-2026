@@ -82,6 +82,21 @@ export async function createAndSendOtp(
 
 }
 
+export async function sendPickupOtpSms(phone: string, code: string) {
+  try {
+    const apiKey = process.env.TWO_FACTOR_API_KEY;
+    if (apiKey) {
+      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKART`;
+      const response = await axios.get(url);
+      console.log(`[2Factor OTP] Pickup OTP sent to ${phone}:`, response.data);
+    } else {
+      console.log(`[2Factor OTP] API key missing, skipped sending pickup OTP to ${phone}`);
+    }
+  } catch (error: any) {
+    console.error("[2Factor OTP] Failed to send pickup OTP:", error.message || error);
+  }
+}
+
 export async function verifyOtp(
   phone: string,
   code: string

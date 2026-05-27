@@ -31,6 +31,7 @@ import { calculateDeliveryCharge, isWithinIndore, haversineDistance } from "../u
 import Restaurant from "../models/Restaurant.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
 import DeliverySetting from "../models/DeliverySetting.model.js";
+import { sendPickupOtpSms } from "../services/otp.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: generate a 4-digit numeric OTP
@@ -700,7 +701,23 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
     order.status = "delivered";
     order.deliveredAt = new Date();
   }
+  
+  if (status === "reached_store" && order.pickupOtp) {
+    const driver = await User.findById(driverId);
+    if (driver && driver.phone) {
+      // Send the SMS asynchronously, don't await so we don't block the response
+      sendPickupOtpSms(driver.phone, order.pickupOtp);
+    }
+  }
+
   await order.save();
+
+  emitOrderStatusUpdate(orderId, {
+    status: order.status,
+    deliveryStatus: order.deliveryStatus,
+    message: status === "delivered" ? "Order delivered" : "Rider status updated",
+    updatedAt: (order as any).updatedAt,
+  });
 
   // Push notifications per delivery status
   if (status === "out_for_delivery") {
@@ -774,14 +791,20 @@ export const getMyOrders = async (req: Request, res: Response) => {
   const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
 
   const active = orders.filter((o) => {
-    const isInProgress = !["delivered", "failed", "cancelled"].includes(o.deliveryStatus) && 
+    const deliveredAt = o.deliveredAt ? new Date(o.deliveredAt) : new Date(o.updatedAt);
+    const isRecentlyDelivered = o.deliveryStatus === "delivered" && (now.getTime() - deliveredAt.getTime() < 5 * 60 * 1000);
+    
+    const isInProgress = (!["delivered", "failed", "cancelled"].includes(o.deliveryStatus) || isRecentlyDelivered) && 
                          !["cancelled", "failed"].includes(o.status);
     const isRecent = new Date(o.createdAt) > threeHoursAgo;
     return isInProgress && isRecent;
   });
   
   const past = orders.filter((o) => {
-    const isDelivered = o.deliveryStatus === "delivered";
+    const deliveredAt = o.deliveredAt ? new Date(o.deliveredAt) : new Date(o.updatedAt);
+    const isRecentlyDelivered = o.deliveryStatus === "delivered" && (now.getTime() - deliveredAt.getTime() < 5 * 60 * 1000);
+    
+    const isDelivered = o.deliveryStatus === "delivered" && !isRecentlyDelivered;
     const isCancelledOrFailed = ["cancelled", "failed"].includes(o.status) || 
                                 ["cancelled", "failed"].includes(o.deliveryStatus);
     const isOld = new Date(o.createdAt) <= threeHoursAgo;
@@ -1055,14 +1078,27 @@ export const sendPickupOtp = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "No pickup OTP generated for this order" });
   }
 
-  // Log to terminal as requested by user
+  // Log to terminal for debugging
   console.log(`\n===========================================`);
   console.log(`[RIDER PICKUP OTP]`);
   console.log(`Order ID: ${order._id}`);
   console.log(`>>> OTP CODE: ${order.pickupOtp} <<<`);
   console.log(`===========================================\n`);
 
-  return res.json({ message: "OTP sent successfully (logged to terminal)" });
+  // Send the OTP via SMS to the assigned driver
+  if (order.assignedDriver) {
+    const driver = await User.findById(order.assignedDriver);
+    if (driver && driver.phone) {
+      console.log(`[Pickup OTP] Sending SMS to driver ${driver.name} at ${driver.phone}`);
+      sendPickupOtpSms(driver.phone, order.pickupOtp);
+    } else {
+      console.log(`[Pickup OTP] Driver not found or no phone number`);
+    }
+  } else {
+    console.log(`[Pickup OTP] No driver assigned to this order`);
+  }
+
+  return res.json({ message: "OTP sent successfully via SMS" });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
