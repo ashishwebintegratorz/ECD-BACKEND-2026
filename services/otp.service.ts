@@ -27,7 +27,8 @@ function generateOtpCode(): string {
 }
 
 export async function createAndSendOtp(
-  phone: string
+  phone: string,
+  skipSms: boolean = false
 ) {
 
   await OtpModel.deleteMany({ phone });
@@ -60,6 +61,11 @@ export async function createAndSendOtp(
   });
 
   try {
+    if (skipSms) {
+      console.log(`[2Factor OTP] Skipped sending SMS for user app testing. Code: ${code}`);
+      return { ok: true };
+    }
+
     const apiKey = process.env.TWO_FACTOR_API_KEY;
     if (apiKey) {
       const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKART`;

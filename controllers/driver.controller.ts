@@ -62,9 +62,14 @@ export const toggleOnlineStatus = asyncHandler(async (req: Request, res: Respons
         return res.status(400).json({ message: "isOnline boolean is required" });
     }
 
+    const updateObj: any = { isOnline };
+    if (isOnline) {
+        updateObj.isReturning = false; // Reset returning status when going online
+    }
+
     const updatedUser = await UserModel.findByIdAndUpdate(
         user._id,
-        { isOnline },
+        updateObj,
         { new: true }
     );
 

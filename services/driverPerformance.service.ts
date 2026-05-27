@@ -14,8 +14,9 @@ export const updatePerformanceOnDelivery = async (orderId: string, driverId: str
     await User.findByIdAndUpdate(driverId, {
         $inc: { 
             dailyOnlineSeconds: durationSeconds,
-            totalWorkSeconds: durationSeconds,
-            walletBalance: order.deliveryCharge || 0
+            totalWorkSeconds: durationSeconds
+            // walletBalance is intentionally omitted here to prevent double-crediting, 
+            // as it is already credited in orders.controller.ts (using driverEarnings).
         }
     });
 };
@@ -44,7 +45,7 @@ export const getDailySummary = async (driverId: string) => {
         updatedAt: { $gte: today }
     });
 
-    const earnings = orders.reduce((sum, o) => sum + (o.deliveryCharge || 0), 0);
+    const earnings = orders.reduce((sum, o) => sum + (o.driverEarnings || o.deliveryCharge || 0), 0);
     const orderCount = orders.length;
 
     return {

@@ -27,6 +27,7 @@ import {
   getRestaurantOrders,
   restaurantMarkPreparing,
   restaurantVerifyPickup,
+  sendPickupOtp,
 } from "../controllers/orders.controller.js";
 
 const router = Router();
@@ -55,10 +56,12 @@ router.patch("/restaurant/prepare/:orderId", jwtAuth, requireRole("admin"), asyn
 router.patch("/restaurant/ready/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantMarkReady));
 router.post("/restaurant/verify-pickup/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantVerifyPickup));
 router.patch("/restaurant/cancel/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantCancelOrder));
+router.post("/restaurant/send-pickup-otp/:orderId", jwtAuth, requireRole("admin"), asyncHandler(sendPickupOtp));
 
 // ─── Driver ───────────────────────────────────────────────────────────────────
 router.get("/driver/my-orders", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(getDriverOrders));
-router.patch("/driver/accept/:orderId", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(driverAcceptOrder));
+router.post("/driver/send-pickup-otp/:orderId", jwtAuth, requireRole("driver"), asyncHandler(sendPickupOtp));
+router.patch("/driver/accept/:orderId", jwtAuth, requireRole("driver"), asyncHandler(driverAcceptOrder));
 router.patch("/driver/decline/:orderId", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(driverDeclineOrder));
 router.put("/driver/update-status/:orderId", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(updateOrderByDriver));
 

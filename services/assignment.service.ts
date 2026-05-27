@@ -23,6 +23,9 @@ export const startAssignmentFlow = async (orderId: string, driverId: string) => 
     order.assignedDriver = driverId as any;
     order.deliveryStatus = "driver_notified";
     order.deliveryOTP = otp;
+    if (!order.pickupOtp) {
+        order.pickupOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    }
     order.assignmentTimeoutAt = timeout;
     await order.save();
 

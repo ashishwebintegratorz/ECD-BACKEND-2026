@@ -342,12 +342,12 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
   const order = await Order.findById(orderId);
   if (!order) return res.status(404).json({ message: "Order not found" });
 
-  if (order.status !== "preparing")
-    return res.status(400).json({ message: "Order must be in preparing state" });
+  if (order.status !== "preparing" && order.status !== "ready")
+    return res.status(400).json({ message: "Order must be in preparing or ready state" });
 
   order.status = "ready";
   order.readyAt = new Date();
-  order.pickupOtp = generateDeliveryOtp(); // Reuse the same 4-digit helper
+  if (!order.pickupOtp) order.pickupOtp = generateDeliveryOtp(); // Reuse the same 4-digit helper
   await order.save();
 
   // Push: order ready
@@ -553,10 +553,14 @@ export const driverAcceptOrder = async (req: Request, res: Response) => {
   // Push: notify customer driver accepted
   notifyDriverAccepted(order.customer.toString(), order.orderNumber).catch(() => { });
 
+  // Populate driver details to send to the frontend immediately
+  const driver = await User.findById(driverId).select("name phone avatar");
+
   emitOrderStatusUpdate(orderId, {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
     message: "Driver has accepted your order",
+    assignedDriver: driver,
     updatedAt: (order as any).updatedAt,
   });
 
@@ -612,32 +616,22 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
   const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
   if (!order) return res.status(404).json({ message: "Order not found or not assigned to you" });
 
-  // OTP check on delivery (4-digit numeric shared by customer)
+  // Delivery OTP check removed as per requirement
   if (status === "delivered") {
-    const customer = await User.findById(order.customer);
-    if (!customer) return res.status(404).json({ message: "Customer not found" });
-    if (!customer.deliveryOtp) return res.status(400).json({ message: "Customer has no delivery OTP set" });
-    if (!otp) return res.status(400).json({ message: "4-digit delivery OTP is required to confirm delivery" });
-    if (String(otp) !== String(customer.deliveryOtp))
-      return res.status(400).json({ message: "Invalid delivery OTP" });
+    // Credit driver's wallet with driverEarnings or deliveryCharge
+    const finalEarnings = order.driverEarnings || order.deliveryCharge || 0;
+    if (finalEarnings > 0) {
+      const driver = await User.findById(driverId);
+      if (driver) {
+        driver.walletBalance = (driver.walletBalance || 0) + finalEarnings;
+        await driver.save();
+      }
+    }
   }
 
-  // OTP check on pickup (4-digit numeric given by restaurant)
+  // Driver cannot mark as picked_up themselves, restaurant must verify OTP
   if (status === "picked_up") {
-    if (!order.pickupOtp) return res.status(400).json({ message: "No pickup OTP set for this order" });
-    if (!otp) return res.status(400).json({ message: "4-digit pickup OTP is required to confirm pickup" });
-    if (String(otp) !== String(order.pickupOtp))
-      return res.status(400).json({ message: "Invalid pickup OTP" });
-    
-    // Set main status as picked up so restaurant sees it in history
-    order.status = "picked_up";
-    
-    // Credit the restaurant's wallet bucket
-    const restaurant = await Restaurant.findById(order.store);
-    if (restaurant) {
-      restaurant.walletBalance += order.payableAmount;
-      await restaurant.save();
-    }
+    return res.status(400).json({ message: "Pickup must be verified by the restaurant. Please ask the restaurant to enter your OTP." });
   }
 
   order.deliveryStatus = status as any;
@@ -667,7 +661,7 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
       deliveryStatus: { $in: ["accepted", "assigned", "out_for_delivery"] },
       _id: { $ne: orderId },
     });
-    if (!remaining) await User.findByIdAndUpdate(driverId, { isReturning: true });
+    if (!remaining) await User.findByIdAndUpdate(driverId, { isReturning: false });
   }
 
   emitOrderStatusUpdate(orderId, {
@@ -760,6 +754,7 @@ export const getOrderTracking = async (req: Request, res: Response) => {
     .populate("store", "name location address phone logo")
     .populate("assignedDriver", "name phone avatar")
     .populate("customer", "deliveryOtp")
+    .populate("items.menuItem", "name")
     .lean();
 
   if (!order) return res.status(404).json({ message: "Order not found" });
@@ -767,16 +762,14 @@ export const getOrderTracking = async (req: Request, res: Response) => {
   // 1. Calculate current step and timeline
   let currentStep = 0; // Order Placed
   if (["preparing", "ready"].includes(order.status) || ["accepted", "reached_store"].includes(order.deliveryStatus)) currentStep = 1;
-  if (["picked_up"].includes(order.deliveryStatus) || order.status === "picked_up") currentStep = 2;
-  if (order.deliveryStatus === "out_for_delivery") currentStep = 3;
-  if (order.deliveryStatus === "delivered" || order.status === "delivered") currentStep = 4;
+  if (["picked_up", "out_for_delivery"].includes(order.deliveryStatus) || order.status === "picked_up") currentStep = 2;
+  if (order.deliveryStatus === "delivered" || order.status === "delivered") currentStep = 3;
 
   const timeline = [
     { status: "Order Placed", completed: true, time: order.createdAt },
     { status: "Preparing", completed: currentStep >= 1, time: currentStep >= 1 ? (order as any).updatedAt : null },
     { status: "Picked Up", completed: currentStep >= 2, time: currentStep >= 2 ? (order as any).updatedAt : null },
-    { status: "On the Way", completed: currentStep >= 3, time: currentStep >= 3 ? (order as any).updatedAt : null },
-    { status: "Delivered", completed: currentStep >= 4, time: currentStep >= 4 ? (order as any).updatedAt : null },
+    { status: "Delivered", completed: currentStep >= 3, time: currentStep >= 3 ? (order as any).updatedAt : null },
   ];
 
   // 2. Cancellation window (5 minutes)
@@ -797,6 +790,13 @@ export const getOrderTracking = async (req: Request, res: Response) => {
       deliveryStatus: order.deliveryStatus,
       payableAmount: order.payableAmount,
       itemsCount: order.items.length,
+      items: order.items.map((item: any) => ({
+        id: item.menuItem?._id || null,
+        name: item.menuItem?.name || "Item",
+        qty: item.quantity,
+        price: item.price,
+        subtotal: item.price * item.quantity
+      })),
       store: order.store,
       assignedDriver: showRider ? order.assignedDriver : null,
       deliveryOTP: order.deliveryOTP,
@@ -980,6 +980,28 @@ export const getRestaurantOrders = async (req: Request, res: Response) => {
     .populate("assignedDriver", "name phone riderId");
 
   return res.json(orders);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DRIVER: Send Pickup OTP to Terminal
+// ─────────────────────────────────────────────────────────────────────────────
+export const sendPickupOtp = async (req: Request, res: Response) => {
+  const orderId = req.params.orderId as string;
+  const order = await Order.findById(orderId);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  if (!order.pickupOtp) {
+    return res.status(400).json({ message: "No pickup OTP generated for this order" });
+  }
+
+  // Log to terminal as requested by user
+  console.log(`\n===========================================`);
+  console.log(`[RIDER PICKUP OTP]`);
+  console.log(`Order ID: ${order._id}`);
+  console.log(`>>> OTP CODE: ${order.pickupOtp} <<<`);
+  console.log(`===========================================\n`);
+
+  return res.json({ message: "OTP sent successfully (logged to terminal)" });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

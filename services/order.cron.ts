@@ -10,18 +10,18 @@ const autoCancelOrders = async () => {
     
     try {
         const now = new Date();
-        const threeMinsAgo = new Date(now.getTime() - 3 * 60 * 1000);
+        const thirtyMinsAgo = new Date(now.getTime() - 30 * 60 * 1000);
         const fourMinsAgo = new Date(now.getTime() - 4 * 60 * 1000);
 
-        // 1. Pending orders > 3 minutes (Restaurant didn't accept)
+        // 1. Pending orders > 30 minutes (Restaurant didn't accept)
         const expiredPendingOrders = await Order.find({
             status: "pending",
-            createdAt: { $lt: threeMinsAgo }
+            createdAt: { $lt: thirtyMinsAgo }
         });
 
         for (const order of expiredPendingOrders) {
-            console.log(`[Cron] Auto-cancelling pending order ${order.orderNumber} (Timeout 3m)`);
-            const reason = "Auto-cancelled: Restaurant did not accept within 3 minutes.";
+            console.log(`[Cron] Auto-cancelling pending order ${order.orderNumber} (Timeout 30m)`);
+            const reason = "Auto-cancelled: Restaurant did not accept within 30 minutes.";
             
             order.status = "cancelled";
             order.cancelledBy = "admin";

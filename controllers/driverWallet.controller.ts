@@ -16,9 +16,19 @@ export const getWalletSummary = asyncHandler(async (req: Request, res: Response)
         .sort({ createdAt: -1 })
         .limit(10);
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayOrders = await import("../models/Order.model.js").then(m => m.default.countDocuments({
+        assignedDriver: driverId,
+        deliveryStatus: "delivered",
+        updatedAt: { $gte: today }
+    }));
+
     return res.json({
         balance: driver?.walletBalance || 0,
         billable_hours: ((driver?.totalWorkSeconds || 0) / 3600).toFixed(1),
+        today_orders: todayOrders,
         recent_requests: requests
     });
 });
