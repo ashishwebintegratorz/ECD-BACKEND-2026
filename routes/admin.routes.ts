@@ -12,6 +12,14 @@ import {
     getStoreStats,
     getLiveOrders,
     updateUserDetails,
+    getRestaurantPayouts,
+    processRestaurantPayout,
+    getRiderOrdersSummary,
+    getRiderOrderHistory,
+    getSuspendedAccounts,
+    deleteRestaurant,
+    getCustomerSummary,
+    getCustomerOrderHistory
 } from "../controllers/admin.controller.js";
 import { getAllWithdrawalRequests, processWithdrawal } from "../controllers/driverWallet.controller.js";
 
@@ -33,9 +41,19 @@ router.get("/users/:id", asyncHandler(getUserById));
 router.patch("/users/:id/role", asyncHandler(updateUserRole));
 router.patch("/users/:id/block", asyncHandler(toggleUserBlock));
 router.patch("/users/:id/details", asyncHandler(updateUserDetails));
+router.get("/suspended-accounts", asyncHandler(getSuspendedAccounts));
+router.get("/customers/summary", asyncHandler(getCustomerSummary));
+router.get("/customers/:id/order-history", asyncHandler(getCustomerOrderHistory));
 
-// ─── Rider Payouts ───────────────────────────────────────────────────────────
+// ─── Rider Payouts & Orders ──────────────────────────────────────────────────
 router.get("/withdrawals", asyncHandler(getAllWithdrawalRequests));
 router.patch("/withdrawals/process", asyncHandler(processWithdrawal));
+router.get("/riders/orders/summary", asyncHandler(getRiderOrdersSummary));
+router.get("/riders/:id/order-history", asyncHandler(getRiderOrderHistory));
+
+// ─── Restaurant Payouts & Management ──────────────────────────────────────────────────────
+router.get("/restaurants/payouts", asyncHandler(getRestaurantPayouts));
+router.patch("/restaurants/payouts/process", asyncHandler(processRestaurantPayout));
+router.delete("/restaurants/:id", asyncHandler(deleteRestaurant));
 
 export default router;

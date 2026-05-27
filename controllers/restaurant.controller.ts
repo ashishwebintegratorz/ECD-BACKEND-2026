@@ -334,7 +334,7 @@ export const getRestaurantMenu = async (req: Request, res: Response) => {
 // ADMIN: POST /api/restaurants/admin/create
 // ─────────────────────────────────────────────────────────────────────────────
 export const createRestaurant = async (req: Request, res: Response) => {
-    const { name, description, address, phone, email, logo, coverImage, accountDetail, lat, lng, categories } = req.body;
+    const { name, description, address, phone, email, logo, coverImage, accountDetail, lat, lng, categories, upi } = req.body;
 
     // Auto-generate slug if not provided, ensure uniqueness
     let slug: string = req.body.slug ? req.body.slug : slugify(name);
@@ -373,6 +373,7 @@ export const createRestaurant = async (req: Request, res: Response) => {
         coverImage,
         accountDetail,
         paymentQr: req.body.paymentQr,
+        upi,
         categories: categories || [],
     });
 
@@ -387,7 +388,7 @@ export const updateRestaurant = async (req: Request, res: Response) => {
     if (!restaurant) throw new NotFoundException("Restaurant not found");
 
     const { name, slug, description, address, phone, email,
-        logo, coverImage, accountDetail, isActive, featured, lat, lng, categories, storeType, paymentQr } = req.body;
+        logo, coverImage, accountDetail, isActive, featured, lat, lng, categories, storeType, paymentQr, upi } = req.body;
 
     if (slug && slug !== restaurant.slug) {
         const taken = await Restaurant.findOne({ slug });
@@ -416,6 +417,7 @@ export const updateRestaurant = async (req: Request, res: Response) => {
             ...(categories !== undefined && { categories }),
             ...(storeType !== undefined && { storeType }),
             ...(paymentQr !== undefined && { paymentQr }),
+            ...(upi !== undefined && { upi }),
             location,
         },
         { new: true, runValidators: true }

@@ -37,6 +37,7 @@ export interface IRestaurant extends Document {
     featured: boolean;
     orderCount: number;
     walletBalance: number;         // Current bucket/earnings balance
+    upi?: string;                  // UPI ID for payouts
     paymentQr?: string;            // QR code image URL for payments
     createdAt: Date;
     updatedAt: Date;
@@ -87,6 +88,7 @@ const RestaurantSchema = new Schema<IRestaurant>(
         featured: { type: Boolean, default: false, index: true },
         orderCount: { type: Number, default: 0 },
         walletBalance: { type: Number, default: 0 },
+        upi: { type: String },
         paymentQr: { type: String },
     },
     { timestamps: true }

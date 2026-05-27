@@ -13,7 +13,8 @@ export type NotificationType =
     | "order_cancelled"
     | "refund_initiated"
     | "refund_completed"
-    | "new_order_store";    // sent to restaurant/grocery store
+    | "new_order_store"
+    | "restaurant_payout";    // sent to restaurant app
 
 interface SendOptions {
     userId: string;
@@ -184,4 +185,13 @@ export const notifyNewOrderToStore = (storeUserId: string, orderNumber: string, 
         body: `Order ${orderNumber} — ₹${totalAmount}. Start preparing now!`,
         type: "new_order_store",
         data: { orderNumber, totalAmount: String(totalAmount) },
+    });
+
+export const notifyRestaurantPayout = (storeUserId: string, amount: number) =>
+    sendPushToUser({
+        userId: storeUserId,
+        title: "Payout Completed ✅",
+        body: `A payout of ₹${amount} has been processed successfully to your account.`,
+        type: "restaurant_payout",
+        data: { amount: String(amount) },
     });

@@ -40,7 +40,7 @@ export const requestWithdrawal = asyncHandler(async (req: Request, res: Response
     const driverId = (req as any).user.id;
     const { amount } = req.body;
 
-    if (!amount || amount <= 0) throw new BadRequestException("Invalid withdrawal amount");
+    if (!amount || amount < 500) throw new BadRequestException("Minimum withdrawal amount is ₹500");
 
     const driver = await User.findById(driverId);
     if (!driver) throw new BadRequestException("Driver not found");
@@ -70,7 +70,7 @@ export const getAllWithdrawalRequests = asyncHandler(async (req: Request, res: R
     const filter = status ? { status } : {};
     
     const requests = await WithdrawalRequest.find(filter)
-        .populate("driver", "name phone riderId upi")
+        .populate("driver", "name phone riderId upi walletBalance")
         .sort({ createdAt: -1 });
 
     return res.json({ requests });
