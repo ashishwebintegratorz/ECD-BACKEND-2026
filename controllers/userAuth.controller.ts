@@ -20,7 +20,7 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
   const { phone } = req.body;
   if (!phone) throw new BadRequestException("Phone required");
 
-  await createAndSendOtp(phone);
+  await createAndSendOtp(phone, false);
 
   return res.json({
     message: `OTP sent on WhatsApp for customer login`,

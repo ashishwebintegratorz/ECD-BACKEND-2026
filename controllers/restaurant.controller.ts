@@ -37,7 +37,7 @@ const haversineKm = (
         Math.sin(dLat / 2) ** 2 +
         Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
     let dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    
+
     // Cap distance for remote testing
     if (dist > 15) {
         dist = 2.5 + (Math.random() * 5); // Random distance between 2.5 and 7.5 km
@@ -275,10 +275,10 @@ export const getRestaurantBySlug = async (req: Request, res: Response) => {
     const groupedMenu: Record<string, typeof restaurant.menu> = {};
     for (const item of restaurant.menu) {
         if (!item.isAvailable) continue;
-        
+
         // Hide internal B2B price from public users
         delete (item as any).b2bPrice;
-        
+
         if (!groupedMenu[item.foodType]) groupedMenu[item.foodType] = [];
         groupedMenu[item.foodType].push(item);
     }
@@ -562,7 +562,7 @@ export const restaurantLogin = async (req: Request, res: Response) => {
     }
 
     let restaurant = await Restaurant.findOne({ restaurantKey });
-    
+
     // Auto-create for testing purposes
     if (!restaurant && restaurantKey === "12345678901234") {
         restaurant = new Restaurant({
@@ -616,17 +616,17 @@ export const getRestaurantProfile = async (req: Request, res: Response) => {
 
     // Aggregate total completed orders
     const stats = await Order.aggregate([
-        { 
-            $match: { 
-                store: restaurant._id, 
-                deliveryStatus: { $in: ["picked_up", "delivered"] } 
-            } 
+        {
+            $match: {
+                store: restaurant._id,
+                deliveryStatus: { $in: ["picked_up", "delivered"] }
+            }
         },
-        { 
-            $group: { 
-                _id: null, 
+        {
+            $group: {
+                _id: null,
                 totalOrders: { $sum: 1 }
-            } 
+            }
         }
     ]);
 
@@ -660,9 +660,9 @@ export const getRestaurantOrderHistory = async (req: Request, res: Response) => 
         store: restaurantId,
         deliveryStatus: { $in: ["picked_up", "delivered"] },
     })
-    .sort({ createdAt: -1 })
-    .select("orderNumber payableAmount status deliveryStatus createdAt")
-    .lean();
+        .sort({ createdAt: -1 })
+        .select("orderNumber payableAmount status deliveryStatus createdAt")
+        .lean();
 
     return res.json({
         success: true,
