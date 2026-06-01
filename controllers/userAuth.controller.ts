@@ -20,10 +20,10 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
   const { phone } = req.body;
   if (!phone) throw new BadRequestException("Phone required");
 
-  await createAndSendOtp(phone, false);
+  await createAndSendOtp(phone, true);
 
   return res.json({
-    message: `OTP sent to your mobile number`,
+    message: `OTP sent on number for customer login`,
   });
 });
 
