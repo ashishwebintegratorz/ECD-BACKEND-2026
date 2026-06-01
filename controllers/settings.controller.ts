@@ -44,3 +44,22 @@ export const updateDeliverySettings = async (req: Request, res: Response) => {
 
     return res.json({ message: "Delivery settings updated successfully", settings });
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC: Get Public Settings (like COD enabled)
+// ─────────────────────────────────────────────────────────────────────────────
+export const getPublicSettings = async (_req: Request, res: Response) => {
+    let settings = await DeliverySetting.findOne();
+    
+    // Create defaults if not exists
+    if (!settings) {
+        settings = await DeliverySetting.create({});
+    }
+
+    return res.json({ 
+        success: true,
+        settings: {
+            isCodEnabled: settings.isCodEnabled
+        } 
+    });
+};
