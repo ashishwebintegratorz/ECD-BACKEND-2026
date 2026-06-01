@@ -22,6 +22,7 @@ import {
     getCustomerOrderHistory
 } from "../controllers/admin.controller.js";
 import { getAllWithdrawalRequests, processWithdrawal } from "../controllers/driverWallet.controller.js";
+import { getDeliverySettings, updateDeliverySettings } from "../controllers/settings.controller.js";
 
 const router = Router();
 
@@ -55,5 +56,9 @@ router.get("/riders/:id/order-history", asyncHandler(getRiderOrderHistory));
 router.get("/restaurants/payouts", asyncHandler(getRestaurantPayouts));
 router.patch("/restaurants/payouts/process", asyncHandler(processRestaurantPayout));
 router.delete("/restaurants/:id", asyncHandler(deleteRestaurant));
+
+// ─── System Settings ─────────────────────────────────────────────────────────
+router.get("/delivery-settings", asyncHandler(getDeliverySettings));
+router.put("/delivery-settings", asyncHandler(updateDeliverySettings));
 
 export default router;

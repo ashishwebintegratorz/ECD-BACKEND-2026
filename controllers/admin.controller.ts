@@ -37,7 +37,7 @@ export const getDashboard = async (_req: Request, res: Response) => {
         ]),
         Order.aggregate([
             { $match: { status: "delivered" } },
-            { $group: { _id: null, totalRestaurantPayouts: { $sum: "$restaurantEarnings" }, totalRiderPayouts: { $sum: "$driverEarnings" } } }
+            { $group: { _id: null, totalRestaurantPayouts: { $sum: "$restaurantEarnings" }, totalRiderPayouts: { $sum: "$driverEarnings" }, totalDeliveryCharge: { $sum: "$deliveryCharge" }, riderAdminCommission: { $sum: "$riderAdminCommission" } } }
         ]),
         Order.find({ status: "delivered" })
             .sort({ deliveredAt: -1, createdAt: -1 })
@@ -52,6 +52,7 @@ export const getDashboard = async (_req: Request, res: Response) => {
     const restaurantPayouts = payoutsAgg[0]?.totalRestaurantPayouts ?? 0;
     const riderPayouts = payoutsAgg[0]?.totalRiderPayouts ?? 0;
     const netProfit = revenue - restaurantPayouts - riderPayouts;
+    const riderAdminCommission = payoutsAgg[0]?.riderAdminCommission ?? 0;
 
     return res.json({
         users: { customers: totalUsers, drivers: totalDrivers },
@@ -61,6 +62,7 @@ export const getDashboard = async (_req: Request, res: Response) => {
         restaurantPayouts,
         riderPayouts,
         netProfit,
+        riderAdminCommission,
         recentOrders,
         pendingRefunds,
     });
@@ -416,7 +418,8 @@ export const deleteRestaurant = async (req: Request, res: Response) => {
 // ADMIN: Get Customer Summary
 // ─────────────────────────────────────────────────────────────────────────────
 export const getCustomerSummary = async (req: Request, res: Response) => {
-    const customers = await User.find({ role: { $nin: ["driver", "admin"] } })
+    // Only show real customers (exclude admins and drivers)
+    const customers = await User.find({ role: "customer" })
         .populate("addresses")
         .sort({ createdAt: -1 })
         .lean();

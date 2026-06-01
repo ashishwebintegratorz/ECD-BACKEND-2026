@@ -28,6 +28,7 @@ import {
   restaurantMarkPreparing,
   restaurantVerifyPickup,
   sendPickupOtp,
+  calculateDeliveryFee,
 } from "../controllers/orders.controller.js";
 
 const router = Router();
@@ -39,6 +40,7 @@ router.post("/:orderId/fail", jwtAuth, asyncHandler(failOrder));
 router.get("/me", jwtAuth, asyncHandler(getMyOrders));
 router.get("/my-orders", jwtAuth, asyncHandler(getMyOrders));
 router.post("/create", jwtAuth, asyncHandler(createOrder));
+router.post("/calculate-fee", jwtAuth, asyncHandler(calculateDeliveryFee));
 router.post("/verify-payment", jwtAuth, asyncHandler(verifyPayment));
 
 router.get("/tracking/:orderId", jwtAuth, asyncHandler(getOrderTracking));

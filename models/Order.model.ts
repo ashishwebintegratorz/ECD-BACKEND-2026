@@ -69,6 +69,7 @@ export interface IOrder extends Document {
   meta?: Record<string, any>;
   driverEarnings?: number;       // Rider's calculated pay (5 rs per km)
   restaurantEarnings?: number;   // Restaurant's business cut (50%)
+  riderAdminCommission?: number; // Admin's commission from rider
   createdAt: Date;
   updatedAt: Date;
 }
@@ -129,6 +130,7 @@ const OrderSchema = new Schema<IOrder>(
     meta: { type: Schema.Types.Mixed },
     driverEarnings: { type: Number, default: 0 },
     restaurantEarnings: { type: Number, default: 0 },
+    riderAdminCommission: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

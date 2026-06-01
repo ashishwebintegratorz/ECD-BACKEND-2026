@@ -30,6 +30,7 @@ import Address from "../models/Address.model.js";
 import { calculateDeliveryCharge, isWithinIndore, haversineDistance } from "../utils/delivery.utils.js";
 import Restaurant from "../models/Restaurant.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
+import DeliverySetting from "../models/DeliverySetting.model.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: generate a 4-digit numeric OTP
@@ -112,8 +113,7 @@ export const createOrder = async (req: Request, res: Response) => {
   if (totalAmount < 100)
     return res.status(400).json({ message: "Minimum order amount is ₹100" });
 
-  const deliveryCharge = calculateDeliveryCharge(totalAmount);
-  
+  // Will calculate dynamic delivery charge below
   // ── Fetch store to check type (Restaurant/Grocery) for GST ───────────────
   const store = await Restaurant.findById(restaurantId);
   const isRestaurant = store?.storeType === "restaurant";
@@ -135,19 +135,38 @@ export const createOrder = async (req: Request, res: Response) => {
     };
   }
 
+  // ── Dynamic Delivery Fee Calculations ─────────────────────────────────────
+  let driverEarnings = 0;
+  let adminCommission = 0;
+  let deliveryCharge = 0;
+
+  if (store && addressDoc.location?.coordinates && store.location?.coordinates) {
+    const [custLng, custLat] = addressDoc.location.coordinates;
+    const [storeLng, storeLat] = store.location.coordinates;
+    
+    // Calculate distance
+    const distanceKm = haversineDistance(storeLat, storeLng, custLat, custLng);
+    
+    // Fetch settings
+    const settings = await DeliverySetting.findOne();
+    const currentHour = new Date().getHours();
+    const isNightShift = currentHour >= 22 || currentHour < 6; // 10 PM to 6 AM
+    
+    const activeShift = settings 
+        ? (isNightShift ? settings.nightShift : settings.morningShift)
+        : { riderFeePerKm: 10, adminCommissionPerKm: 2 }; // Fallback
+
+    driverEarnings = Math.max(15, Math.ceil(distanceKm * activeShift.riderFeePerKm));
+    adminCommission = Math.ceil(distanceKm * activeShift.adminCommissionPerKm);
+    
+    // Total delivery charge shown to user is Rider Fee + Admin Commission
+    deliveryCharge = driverEarnings + adminCommission;
+  }
+
   // ── GST Calculation (5% for Restaurants) ──────────────────────────────────
   const taxableAmount = Math.max(0, totalAmount - totalDiscount);
   const gst = isRestaurant ? Math.round(taxableAmount * 0.05) : 0;
   const payableAmount = taxableAmount + deliveryCharge + gst;
-
-  // ── Earnings Calculations ─────────────────────────────────────────────────
-  let driverEarnings = 0;
-  if (store && addressDoc.location?.coordinates && store.location?.coordinates) {
-    const [custLng, custLat] = addressDoc.location.coordinates;
-    const [storeLng, storeLat] = store.location.coordinates;
-    const distanceKm = haversineDistance(storeLat, storeLng, custLat, custLng);
-    driverEarnings = Math.max(15, Math.ceil(distanceKm * 5)); // 5 rs per km, min 15 rs
-  }
 
   // Calculate 50% deal for the restaurant on the food price
   const restaurantEarnings = Math.round(taxableAmount * 0.50);
@@ -161,6 +180,7 @@ export const createOrder = async (req: Request, res: Response) => {
     payableAmount,
     driverEarnings,
     restaurantEarnings,
+    riderAdminCommission: adminCommission,
     addressSnapshot
   }, null, 2));
 
@@ -188,6 +208,7 @@ export const createOrder = async (req: Request, res: Response) => {
       deliveryStatus: "pending",
       driverEarnings,
       restaurantEarnings,
+      riderAdminCommission: adminCommission,
       ...(appliedCoupon && { coupon: appliedCoupon }),
     });
   } catch (err: any) {
@@ -286,6 +307,46 @@ export const createOrder = async (req: Request, res: Response) => {
     gst,
     totalDiscount,
     currency: "INR",
+  });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMER: Calculate Delivery Fee (Dynamic Pricing)
+// ─────────────────────────────────────────────────────────────────────────────
+export const calculateDeliveryFee = async (req: Request, res: Response) => {
+  const { restaurantId, lat, lng } = req.body;
+
+  if (!restaurantId || !lat || !lng) {
+    return res.status(400).json({ message: "restaurantId, lat, and lng are required" });
+  }
+
+  const store = await Restaurant.findById(restaurantId);
+  if (!store || !store.location?.coordinates) {
+    return res.status(400).json({ message: "Invalid restaurant or location missing" });
+  }
+
+  const [storeLng, storeLat] = store.location.coordinates;
+  const distanceKm = haversineDistance(storeLat, storeLng, parseFloat(lat), parseFloat(lng));
+
+  const settings = await DeliverySetting.findOne();
+  const currentHour = new Date().getHours();
+  const isNightShift = currentHour >= 22 || currentHour < 6; // 10 PM to 6 AM
+
+  const activeShift = settings
+    ? (isNightShift ? settings.nightShift : settings.morningShift)
+    : { riderFeePerKm: 10, adminCommissionPerKm: 2 };
+
+  const driverEarnings = Math.max(15, Math.ceil(distanceKm * activeShift.riderFeePerKm));
+  const adminCommission = Math.ceil(distanceKm * activeShift.adminCommissionPerKm);
+  const deliveryCharge = driverEarnings + adminCommission;
+
+  return res.json({
+    success: true,
+    distanceKm: distanceKm.toFixed(2),
+    deliveryCharge,
+    driverEarnings,
+    adminCommission,
+    isCodEnabled: settings?.isCodEnabled ?? true,
   });
 };
 
