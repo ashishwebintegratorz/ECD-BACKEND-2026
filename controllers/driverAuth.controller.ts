@@ -22,9 +22,19 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
   const { phone } = req.body;
   if (!phone) throw new BadRequestException("Phone required");
 
+  // Check if driver already exists
+  const existingDriver = await UserModel.findOne({ phone, role: "driver" });
+  if (existingDriver) {
+    return res.json({
+      exists: true,
+      message: "Driver account already exists. Please login with PIN.",
+    });
+  }
+
   await createAndSendOtp(phone);
 
   return res.json({
+    exists: false,
     message: `OTP sent on WhatsApp for driver login`,
   });
 });
