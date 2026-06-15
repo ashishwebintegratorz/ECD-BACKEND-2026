@@ -10,7 +10,10 @@ import {
     markAllAsRead,
     getUnreadCount,
 } from "../controllers/notification.controller.js";
-import { sendNotificationToAllUsers } from "../controllers/adminNotification.controller.js";
+import { 
+    sendNotificationToAllUsers,
+    getAdminNotificationHistory 
+} from "../controllers/adminNotification.controller.js";
 
 const router = Router();
 
@@ -28,5 +31,6 @@ router.patch("/read-all", asyncHandler(markAllAsRead));
 
 // Admin routes
 router.post("/admin/send", requireRole("admin"), asyncHandler(sendNotificationToAllUsers));
+router.get("/admin/history", requireRole("admin"), asyncHandler(getAdminNotificationHistory));
 
 export default router;
