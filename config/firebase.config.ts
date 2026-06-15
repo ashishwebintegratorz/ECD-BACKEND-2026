@@ -4,7 +4,13 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 
 try {
-  const serviceAccount = require("./firebase-service-account.json");
+  let serviceAccount: any;
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else {
+    serviceAccount = require("./firebase-service-account.json");
+  }
 
   if (!admin.apps.length) {
     admin.initializeApp({
@@ -12,8 +18,8 @@ try {
     });
     console.log("✅ Firebase Admin SDK initialized successfully.");
   }
-} catch (error) {
-  console.warn("⚠️  Firebase Service Account not found (config/firebase-service-account.json). Push notifications will be disabled.");
+} catch (error: any) {
+  console.warn("⚠️  Firebase Admin SDK failed to initialize. Push notifications will be disabled. Error:", error.message);
 }
 
 export default admin;
