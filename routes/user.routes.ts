@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { jwtAuth } from "../middlewares/jwtAuth.middleware.js";
-import { updateProfile } from "../controllers/user.controller.js";
+import { updateProfile, deleteAccount } from "../controllers/user.controller.js";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 
 const router = Router();
@@ -23,4 +23,8 @@ router.get("/me", jwtAuth, (req, res) => {
 // PUT /api/v1/user/update-profile
 router.put("/update-profile", jwtAuth, asyncHandler(updateProfile));
 
+// DELETE /api/v1/user/delete-account
+router.delete("/delete-account", jwtAuth, asyncHandler(deleteAccount));
+
 export default router;
+
