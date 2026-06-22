@@ -35,7 +35,13 @@ export const jwtAuth = async (
 
     (req as any).user = user;
     next();
-  } catch (err) {
+  } catch (err: any) {
+    if (err.name === 'JsonWebTokenError' || err.message === 'invalid signature' || err.message === 'jwt malformed') {
+      return next(new UnauthorizedException("Invalid token signature"));
+    }
+    if (err.name === 'TokenExpiredError') {
+      return next(new UnauthorizedException("Token expired"));
+    }
     next(err);
   }
 };

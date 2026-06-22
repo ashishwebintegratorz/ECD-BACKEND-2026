@@ -73,10 +73,13 @@ export const processPendingRefunds = async () => {
             refund.status = "processing";
             await refund.save();
 
-            // Call Razorpay refund API
+            // Call Razorpay refund API (Instant Refund)
             const razorpayRefund = await (razorpay.payments as any).refund(
                 refund.razorpayPaymentId!,
-                { amount: refund.amount * 100 } // Razorpay uses paise
+                { 
+                    amount: refund.amount * 100, // Razorpay uses paise
+                    speed: "optimum" // Enables Instant Refund
+                } 
             );
 
             refund.status = "completed";
