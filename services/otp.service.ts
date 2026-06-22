@@ -68,7 +68,7 @@ export async function createAndSendOtp(
 
     const apiKey = process.env.TWO_FACTOR_API_KEY;
     if (apiKey) {
-      const url = `https://2factor.in/API/V1/${apiKey}/VOICE/${phone}/${code}`;
+      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}`;
       const response = await axios.get(url);
       console.log("[2Factor OTP] Sent successfully:", response.data);
     } else {
