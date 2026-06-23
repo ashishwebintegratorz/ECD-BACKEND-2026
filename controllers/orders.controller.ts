@@ -790,34 +790,9 @@ export const getMyOrders = async (req: Request, res: Response) => {
   const now = new Date();
   const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
 
-  const active = orders.filter((o) => {
-    const deliveredAt = o.deliveredAt ? new Date(o.deliveredAt) : new Date(o.updatedAt);
-    const isRecentlyDelivered = o.deliveryStatus === "delivered" && (now.getTime() - deliveredAt.getTime() < 5 * 60 * 1000);
-    
-    const isInProgress = (!["delivered", "failed", "cancelled"].includes(o.deliveryStatus) || isRecentlyDelivered) && 
-                         !["cancelled", "failed"].includes(o.status);
-    const isRecent = new Date(o.createdAt) > threeHoursAgo;
-    return isInProgress && isRecent;
-  });
-  
-  const past = orders.filter((o) => {
-    const deliveredAt = o.deliveredAt ? new Date(o.deliveredAt) : new Date(o.updatedAt);
-    const isRecentlyDelivered = o.deliveryStatus === "delivered" && (now.getTime() - deliveredAt.getTime() < 5 * 60 * 1000);
-    
-    const isDelivered = o.deliveryStatus === "delivered" && !isRecentlyDelivered;
-    const isCancelledOrFailed = ["cancelled", "failed"].includes(o.status) || 
-                                ["cancelled", "failed"].includes(o.deliveryStatus);
-    const isOld = new Date(o.createdAt) <= threeHoursAgo;
-    if (isCancelledOrFailed) return false;
-    return isDelivered || isOld;
-  });
-  
-  const cancelled = orders.filter((o) => 
-    o.status === "cancelled" || 
-    o.deliveryStatus === "cancelled" || 
-    o.status === "failed" || 
-    o.deliveryStatus === "failed"
-  );
+  const active = orders.filter((o) => ["pending", "preparing", "ready", "picked_up", "out_for_delivery"].includes(o.status));
+  const past = orders.filter((o) => o.status === "delivered");
+  const cancelled = orders.filter((o) => ["cancelled", "failed"].includes(o.status));
 
   return res.json({
     success: true,

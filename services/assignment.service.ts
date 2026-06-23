@@ -5,7 +5,7 @@ import { emitOrderAssignedToDriver, emitOrderStatusUpdate } from "../socket/orde
 import { haversineDistance } from "../utils/delivery.utils.js";
 import { notifyDriverAssigned } from "./notification.service.js";
 
-const ASSIGNMENT_TIMEOUT_MS = 60000; // 60 seconds
+const ASSIGNMENT_TIMEOUT_MS = 15000; // 15 seconds
 
 /**
  * Handles the assignment flow for a driver, including real-time notifications
@@ -114,8 +114,17 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
             // Driver is free, get their location
             const loc = await DriverLocation.findOne({ driver: driver._id });
             
-            // FALLBACK for testing: if no location found, assume distance is 1km so popup still works
-            const [lng, lat] = loc?.location?.coordinates || [storeLng + 0.01, storeLat + 0.01]; 
+            // If no location found or it hasn't been updated in 2 minutes, consider them offline
+            if (!loc || !loc.updatedAt) {
+                continue; // Skip drivers with no location
+            }
+
+            const diffMs = Date.now() - loc.updatedAt.getTime();
+            if (diffMs > 2 * 60 * 1000) { // 2 minutes staleness
+                continue; // Skip this driver
+            }
+            
+            const [lng, lat] = loc.location.coordinates; 
             const distance = haversineDistance(lat, lng, storeLat, storeLng);
             
             if (distance < minDistance) {

@@ -16,8 +16,7 @@ async function start() {
 
   const io = new IOServer(server, {
     cors: {
-      origin: config.FRONTEND_ORIGIN,
-      credentials: true
+      origin: "*",
     }
   });
 

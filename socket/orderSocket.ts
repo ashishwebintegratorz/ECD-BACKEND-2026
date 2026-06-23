@@ -10,8 +10,8 @@ export function initOrderSocket(instance: Server) {
   instance.on("connection", (socket) => {
     console.log("Socket connected:", socket.id);
 
-    // Customer joins their order room
     socket.on("joinOrder", (orderId: string) => {
+      console.log(`[Socket] Client ${socket.id} joining order room: order_${orderId}`);
       if (!orderId) return;
       socket.join(`order_${orderId}`);
     });
@@ -46,7 +46,11 @@ export function initOrderSocket(instance: Server) {
 
 // Notify customer + admin when order status changes
 export function emitOrderStatusUpdate(orderId: string, payload: any) {
-  if (!io) return;
+  console.log(`[Socket] EMITTING orderStatusUpdated for order_${orderId}:`, payload);
+  if (!io) {
+    console.log("[Socket] Error: io is null!");
+    return;
+  }
   io.to(`order_${orderId}`).emit("orderStatusUpdated", { orderId, ...payload });
   io.to("admins").emit("orderStatusChanged", { orderId, ...payload });
 }

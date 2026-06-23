@@ -40,7 +40,7 @@ export const requestWithdrawal = asyncHandler(async (req: Request, res: Response
     const driverId = (req as any).user.id;
     const { amount } = req.body;
 
-    if (!amount || amount < 500) throw new BadRequestException("Minimum withdrawal amount is ₹500");
+    if (!amount || amount < 200) throw new BadRequestException("Minimum withdrawal amount is ₹200");
 
     const driver = await User.findById(driverId);
     if (!driver) throw new BadRequestException("Driver not found");

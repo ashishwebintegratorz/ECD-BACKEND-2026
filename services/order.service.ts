@@ -72,11 +72,8 @@ export const confirmOrderLogic = async (orderId: string) => {
         return;
     }
 
-    // 1. Set to preparing immediately
-    if (order.status !== "preparing") {
-        order.status = "preparing";
-        await order.save();
-    }
+    // 1. Leave order as pending until restaurant explicitly accepts it
+    // No status change here.
 
     // 2. Decrement product stock atomically — prevents overselling race condition
     for (const item of order.items) {

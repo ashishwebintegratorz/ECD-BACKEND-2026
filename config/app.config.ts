@@ -28,7 +28,7 @@ const appConfig = (): AppConfig => ({
   JWT_REFRESH_EXPIRES_IN: getEnv("JWT_REFRESH_EXPIRES_IN", "90d"),
 
   OTP_EXPIRES_MINUTES: getEnv("OTP_EXPIRES_MINUTES", "5"),
-  FRONTEND_ORIGIN: getEnv("FRONTEND_ORIGIN", "http://localhost:3000"),
+  FRONTEND_ORIGIN: getEnv("FRONTEND_ORIGIN", "https://your-frontend-deployment.com"),
 });
 
 export const config = appConfig();
