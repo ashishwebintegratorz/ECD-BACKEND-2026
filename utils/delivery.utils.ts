@@ -26,10 +26,6 @@ export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   let dist = R * c;
   
-  // Cap distance for remote testing (so remote users can test effectively)
-  if (dist > 15) {
-      dist = 2.5 + (Math.random() * 5); // Random distance between 2.5 and 7.5 km
-  }
   return dist;
 }
 
