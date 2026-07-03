@@ -6,6 +6,7 @@ import Order from "../models/Order.model.js";
 import { NotFoundException, BadRequestException } from "../utils/appError.js";
 import { slugify } from "../validators/restaurant.validator.js";
 import { Types } from "mongoose";
+import { createAndSendOtp, verifyOtp } from "../services/otp.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -697,5 +698,55 @@ export const payoutRestaurant = async (req: Request, res: Response) => {
         success: true,
         message: `Successfully paid out ₹${amount}`,
         newBalance: restaurant.walletBalance,
+    });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: POST /api/v1/restaurants/send-otp
+// ─────────────────────────────────────────────────────────────────────────────
+export const restaurantSendOtp = async (req: Request, res: Response) => {
+    const { phone } = req.body;
+
+    if (!phone) {
+        return res.status(400).json({ message: "Phone number is required" });
+    }
+
+    const restaurant = await Restaurant.findOne({ phone });
+
+    if (!restaurant) {
+        return res.status(404).json({ message: "No restaurant found with this phone number. Please contact admin to onboard." });
+    }
+
+    await createAndSendOtp(phone);
+    return res.json({ message: "OTP sent successfully" });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: POST /api/v1/restaurants/verify-otp
+// ─────────────────────────────────────────────────────────────────────────────
+export const restaurantVerifyOtp = async (req: Request, res: Response) => {
+    const { phone, otp } = req.body;
+
+    if (!phone || !otp) {
+        return res.status(400).json({ message: "Phone number and OTP are required" });
+    }
+
+    const isValid = await verifyOtp(phone, otp);
+    if (!isValid) {
+        return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    const restaurant = await Restaurant.findOne({ phone });
+    if (!restaurant) {
+        return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    // For the current MVP setup, we use the test token bypass.
+    // In production, sign a proper JWT here.
+    return res.json({
+        token: "RESTAURANT_TEST_TOKEN",
+        _id: restaurant._id,
+        restaurantId: restaurant.restaurantId,
+        message: "Login successful"
     });
 };

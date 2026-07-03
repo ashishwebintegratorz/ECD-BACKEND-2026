@@ -34,7 +34,6 @@ export async function createAndSendOtp(
   await OtpModel.deleteMany({ phone });
 
   const code = generateOtpCode();
-  console.log("OTP CODE:", code);
 
   const codeHash =
     await bcrypt.hash(code, 10);

@@ -423,9 +423,18 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
   });
 
   // Auto-assign to nearest available driver
-  assignToNearestDriver(orderId).catch(err => {
+  const assigned = await assignToNearestDriver(orderId).catch(err => {
     console.error(`[Auto-Assign] Failed to auto assign order ${orderId}:`, err);
+    return false;
   });
+
+  if (assigned === false) {
+    return res.json({ 
+        message: "Rider is offline or none available. Not showing rider.", 
+        driverNotFound: true, 
+        order 
+    });
+  }
 
   return res.json({ message: "Order marked as ready. Assigning nearest rider...", order });
 };

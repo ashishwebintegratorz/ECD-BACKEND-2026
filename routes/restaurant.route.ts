@@ -14,10 +14,11 @@ import {
     updateMenuItem,
     deleteMenuItem,
     toggleRestaurantActive,
-    restaurantLogin,
     getRestaurantProfile,
     getRestaurantOrderHistory,
     payoutRestaurant,
+    restaurantSendOtp,
+    restaurantVerifyOtp
 } from "../controllers/restaurant.controller.js";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
@@ -59,8 +60,11 @@ router.get("/menu/:slug", asyncHandler(getRestaurantMenu));
 // ADMIN & RESTAURANT 
 // ─────────────────────────────────────────────────────────────────
 
-// POST /api/restaurants/login
-router.post("/login", asyncHandler(restaurantLogin));
+// POST /api/restaurants/send-otp
+router.post("/send-otp", asyncHandler(restaurantSendOtp));
+
+// POST /api/restaurants/verify-otp
+router.post("/verify-otp", asyncHandler(restaurantVerifyOtp));
 
 // GET /api/restaurants/:restaurantId/profile
 router.get("/:restaurantId/profile", jwtAuth, requireRole("admin"), asyncHandler(getRestaurantProfile));

@@ -120,8 +120,8 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
             }
 
             const diffMs = Date.now() - loc.updatedAt.getTime();
-            if (diffMs > 2 * 60 * 1000) { // 2 minutes staleness
-                continue; // Skip this driver
+            if (diffMs > 60 * 60 * 1000) { // 60 minutes staleness
+                continue; // Skip this driver if location is extremely old
             }
             
             const [lng, lat] = loc.location.coordinates; 
@@ -137,6 +137,7 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
     if (nearestDriverId) {
         console.log(`[Auto-Assign] Found nearest driver ${nearestDriverId} for order ${orderId} (Distance: ${minDistance.toFixed(2)} km)`);
         await startAssignmentFlow(orderId, nearestDriverId);
+        return true;
     } else {
         console.log(`[Auto-Assign] No available drivers for order ${orderId}`);
         
@@ -149,5 +150,6 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
             deliveryStatus: "driver_not_found",
             message: "No available riders found. Please try assigning again.",
         });
+        return false;
     }
 };
