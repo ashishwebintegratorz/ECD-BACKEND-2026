@@ -15,6 +15,8 @@ router.get("/me", jwtAuth, (req, res) => {
             role: user.role,
             isVerified: user.isVerified,
             avatar: user.avatar,
+            isOnline: user.isOnline,
+            isReturning: user.isReturning,
             createdAt: user.createdAt,
         },
     });

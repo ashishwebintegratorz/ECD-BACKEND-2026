@@ -24,8 +24,8 @@ const appConfig = (): AppConfig => ({
 
   JWT_ACCESS_SECRET: getEnv("JWT_ACCESS_SECRET", "access-secret") as Secret,
   JWT_REFRESH_SECRET: getEnv("JWT_REFRESH_SECRET", "refresh-secret") as Secret,
-  JWT_ACCESS_EXPIRES_IN: getEnv("JWT_ACCESS_EXPIRES_IN", "30d"),
-  JWT_REFRESH_EXPIRES_IN: getEnv("JWT_REFRESH_EXPIRES_IN", "90d"),
+  JWT_ACCESS_EXPIRES_IN: "365d", // Hardcoded to 1 year to avoid Render env var issues
+  JWT_REFRESH_EXPIRES_IN: "365d", // Hardcoded to 1 year
 
   OTP_EXPIRES_MINUTES: getEnv("OTP_EXPIRES_MINUTES", "5"),
   FRONTEND_ORIGIN: getEnv("FRONTEND_ORIGIN", "https://your-frontend-deployment.com"),
