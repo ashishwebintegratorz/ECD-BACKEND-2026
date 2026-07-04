@@ -712,7 +712,13 @@ export const restaurantSendOtp = async (req: Request, res: Response) => {
     }
 
     const searchPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
-    const restaurant = await Restaurant.findOne({ phone: searchPhone });
+    const rawPhone = phone.startsWith('+91') ? phone.replace('+91', '') : phone;
+    const restaurant = await Restaurant.findOne({ 
+        $or: [
+            { phone: searchPhone },
+            { phone: rawPhone }
+        ]
+    });
 
     if (!restaurant) {
         return res.status(404).json({ message: "No restaurant found with this phone number. Please contact admin to onboard." });
@@ -733,13 +739,19 @@ export const restaurantVerifyOtp = async (req: Request, res: Response) => {
     }
 
     const searchPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
+    const rawPhone = phone.startsWith('+91') ? phone.replace('+91', '') : phone;
 
     const isValid = await verifyOtp(searchPhone, otp);
     if (!isValid) {
         return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
-    const restaurant = await Restaurant.findOne({ phone: searchPhone });
+    const restaurant = await Restaurant.findOne({ 
+        $or: [
+            { phone: searchPhone },
+            { phone: rawPhone }
+        ]
+    });
     if (!restaurant) {
         return res.status(404).json({ message: "Restaurant not found" });
     }
