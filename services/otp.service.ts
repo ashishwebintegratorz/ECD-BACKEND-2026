@@ -11,7 +11,18 @@ const OTP_TTL_MINUTES = Number(
 );
 
 function generateOtpCode(): string {
-  return "1234";
+
+  const min = 10 ** (OTP_LENGTH - 1);
+
+  const max = 10 ** OTP_LENGTH - 1;
+
+  return String(
+
+    Math.floor(
+      Math.random() * (max - min + 1)
+    ) + min
+
+  );
 
 }
 
