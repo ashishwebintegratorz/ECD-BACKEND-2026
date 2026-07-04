@@ -24,7 +24,7 @@ const appConfig = (): AppConfig => ({
 
   JWT_ACCESS_SECRET: getEnv("JWT_ACCESS_SECRET", "access-secret") as Secret,
   JWT_REFRESH_SECRET: getEnv("JWT_REFRESH_SECRET", "refresh-secret") as Secret,
-  JWT_ACCESS_EXPIRES_IN: getEnv("JWT_ACCESS_EXPIRES_IN", "30m"),
+  JWT_ACCESS_EXPIRES_IN: getEnv("JWT_ACCESS_EXPIRES_IN", "30d"),
   JWT_REFRESH_EXPIRES_IN: getEnv("JWT_REFRESH_EXPIRES_IN", "90d"),
 
   OTP_EXPIRES_MINUTES: getEnv("OTP_EXPIRES_MINUTES", "5"),
