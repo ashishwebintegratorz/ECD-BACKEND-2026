@@ -1,6 +1,8 @@
 import { Server } from "socket.io";
+import UserModel from "../models/User.model.js";
 
 let io: Server | null = null;
+const driverSockets = new Map<string, string>(); // socket.id -> driverId
 
 export function setIo(instance: Server) {
   io = instance;
@@ -28,9 +30,10 @@ export function initOrderSocket(instance: Server) {
     });
 
     // Driver joins their room to receive assignment notifications
-    socket.on("joinDriver", (driverId: string) => {
+    socket.on("joinDriver", async (driverId: string) => {
       if (!driverId) return;
       socket.join(`driver_${driverId}`);
+      driverSockets.set(socket.id, driverId);
     });
 
     // Admin room
@@ -38,8 +41,19 @@ export function initOrderSocket(instance: Server) {
       socket.join("admins");
     });
 
-    socket.on("disconnect", (reason) => {
+    socket.on("disconnect", async (reason) => {
       console.log("Socket disconnected:", socket.id, reason);
+      
+      const driverId = driverSockets.get(socket.id);
+      if (driverId) {
+        try {
+          driverSockets.delete(socket.id);
+          await UserModel.findByIdAndUpdate(driverId, { isOnline: false });
+          console.log(`[Socket] Driver ${driverId} marked offline due to disconnect.`);
+        } catch (err) {
+          console.error("Error setting driver offline on disconnect:", err);
+        }
+      }
     });
   });
 }

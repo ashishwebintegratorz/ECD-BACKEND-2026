@@ -323,7 +323,7 @@ export const processRestaurantPayout = async (req: Request, res: Response) => {
 export const getRiderOrdersSummary = async (_req: Request, res: Response) => {
     // 1. Fetch all drivers
     const drivers = await User.find({ role: "driver" })
-        .select("name phone upi riderId")
+        .select("name phone upi riderId isOnline updatedAt")
         .lean();
 
     // 2. Aggregate completed orders count and earnings per driver
@@ -338,15 +338,39 @@ export const getRiderOrdersSummary = async (_req: Request, res: Response) => {
         }
     ]);
 
+    // 3. Aggregate active orders to find "busy" drivers
+    const activeStats = await Order.aggregate([
+        { $match: { deliveryStatus: { $in: ["assigned", "picked_up"] }, assignedDriver: { $exists: true } } },
+        { 
+            $group: { 
+                _id: "$assignedDriver", 
+                activeCount: { $sum: 1 }
+            } 
+        }
+    ]);
+
     const statsMap = new Map();
     stats.forEach(stat => statsMap.set(stat._id.toString(), stat));
 
+    const activeMap = new Map();
+    activeStats.forEach(stat => activeMap.set(stat._id.toString(), stat));
+
     const riders = drivers.map(d => {
         const stat = statsMap.get(d._id.toString()) || { completedOrders: 0, totalEarnings: 0 };
+        const activeStat = activeMap.get(d._id.toString()) || { activeCount: 0 };
+        
+        let status = "Offline";
+        if (d.isOnline) {
+            status = activeStat.activeCount > 0 ? "Busy" : "Online";
+        }
+
         return {
             ...d,
             completedOrders: stat.completedOrders,
-            totalEarnings: stat.totalEarnings
+            totalEarnings: stat.totalEarnings,
+            status,
+            activeCount: activeStat.activeCount,
+            lastActive: d.updatedAt
         };
     }).sort((a, b) => b.completedOrders - a.completedOrders); // Sort by highest orders
 
