@@ -409,6 +409,7 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
 
   order.status = "ready";
   order.readyAt = new Date();
+  order.rejectedDrivers = []; // Clear previous rejections on manual retry!
   if (!order.pickupOtp) order.pickupOtp = generateDeliveryOtp(); // Reuse the same 4-digit helper
   await order.save();
 
@@ -655,6 +656,8 @@ export const driverDeclineOrder = async (req: Request, res: Response) => {
   const declineReason = reason?.trim() || "Driver declined the delivery";
   order.assignedDriver = undefined;
   order.deliveryStatus = "pending";
+  if (!order.rejectedDrivers) order.rejectedDrivers = [];
+  order.rejectedDrivers.push(driverId as any);
   logCancellation(order, "driver", driverId, declineReason);
   await order.save();
 
@@ -799,7 +802,13 @@ export const getMyOrders = async (req: Request, res: Response) => {
   const now = new Date();
   const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
 
-  const active = orders.filter((o) => ["pending", "preparing", "ready", "picked_up", "out_for_delivery"].includes(o.status));
+  const active = orders.filter((o) => ["pending", "preparing", "ready", "picked_up", "out_for_delivery"].includes(o.status)).map(o => {
+    // Hide driver details until driver accepts
+    if (o.deliveryStatus === "driver_notified" || o.deliveryStatus === "pending") {
+      return { ...o, assignedDriver: null };
+    }
+    return o;
+  });
   const past = orders.filter((o) => o.status === "delivered");
   const cancelled = orders.filter((o) => ["cancelled", "failed"].includes(o.status));
 
@@ -896,7 +905,12 @@ export const getOrderById = async (req: Request, res: Response) => {
   if (!isAdmin && !isOwner && !isAssignedDriver)
     return res.status(403).json({ message: "Access denied" });
 
-  return res.json(order);
+  const orderObj = order.toObject();
+  if (isOwner && (orderObj.deliveryStatus === "driver_notified" || orderObj.deliveryStatus === "pending")) {
+    orderObj.assignedDriver = undefined;
+  }
+
+  return res.json(orderObj);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -54,7 +54,7 @@ const toObjectId = (id: string) => new Types.ObjectId(id as string);
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurants = async (req: Request, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10)); // cap at 50
+    const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 10)); // cap at 1000
     const search = (req.query.search as string) || "";
     const storeType = (req.query.storeType as string) || "";
     const userLat = req.query.lat ? Number(req.query.lat) : null;
@@ -535,7 +535,7 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const toggleRestaurantActive = async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
-    const { isActive } = req.body;
+    const { isActive } = req.body || {};
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
@@ -583,6 +583,10 @@ export const restaurantLogin = async (req: Request, res: Response) => {
 
     if (!restaurant) {
         return res.status(401).json({ message: "Invalid restaurant key" });
+    }
+
+    if (!restaurant.isActive) {
+        return res.status(401).json({ message: "Your restaurant account has been blocked. Please contact admin." });
     }
 
     // Self-healing: if an existing restaurant lacks a restaurantId, generate and save it
@@ -754,6 +758,10 @@ export const restaurantVerifyOtp = async (req: Request, res: Response) => {
     });
     if (!restaurant) {
         return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    if (!restaurant.isActive) {
+        return res.status(401).json({ message: "Your restaurant account has been blocked. Please contact admin." });
     }
 
     // For the current MVP setup, we use the test token bypass.

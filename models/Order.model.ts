@@ -54,6 +54,7 @@ export interface IOrder extends Document {
   status: OrderStatus;
   deliveryStatus: DeliveryStatus;
   assignedDriver?: Types.ObjectId;
+  rejectedDrivers: Types.ObjectId[];
   assignmentId?: Types.ObjectId;
   paymentTransaction?: Types.ObjectId;
   cancellationReason?: string;
@@ -111,6 +112,7 @@ const OrderSchema = new Schema<IOrder>(
     status: { type: String, default: "pending", index: true },
     deliveryStatus: { type: String, default: "pending", index: true },
     assignedDriver: { type: Schema.Types.ObjectId, ref: "User" },
+    rejectedDrivers: { type: [{ type: Schema.Types.ObjectId, ref: "User" }], default: [] },
     assignmentId: { type: Schema.Types.ObjectId, ref: "Assignment" },
     paymentTransaction: { type: Schema.Types.ObjectId, ref: "PaymentTransaction" },
     cancellationReason: { type: String },

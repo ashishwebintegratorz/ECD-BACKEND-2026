@@ -323,7 +323,7 @@ export const processRestaurantPayout = async (req: Request, res: Response) => {
 export const getRiderOrdersSummary = async (_req: Request, res: Response) => {
     // 1. Fetch all drivers
     const drivers = await User.find({ role: "driver" })
-        .select("name phone upi riderId isOnline updatedAt")
+        .select("name phone upi riderId isOnline updatedAt status")
         .lean();
 
     // 2. Aggregate completed orders count and earnings per driver
@@ -360,7 +360,9 @@ export const getRiderOrdersSummary = async (_req: Request, res: Response) => {
         const activeStat = activeMap.get(d._id.toString()) || { activeCount: 0 };
         
         let status = "Offline";
-        if (d.isOnline) {
+        if (d.status === "suspended") {
+            status = "Suspended";
+        } else if (d.isOnline) {
             status = activeStat.activeCount > 0 ? "Busy" : "Online";
         }
 

@@ -84,6 +84,10 @@ export const loginWithPin = asyncHandler(
       throw new BadRequestException("PIN login is only for admin and driver accounts");
     }
 
+    if (user.status === "suspended") {
+      throw new UnauthorizedException("Your account has been blocked. Please contact admin.");
+    }
+
     if (!user.pinHash) {
       throw new BadRequestException(
         "PIN not set. Please register via OTP first to set your PIN."
@@ -125,6 +129,10 @@ export const refreshTokenController = asyncHandler(
       throw new UnauthorizedException("User not found");
     }
 
+    if (user.status === "suspended") {
+      throw new UnauthorizedException("Your account has been blocked. Please contact admin.");
+    }
+
     const auth = createAuthTokens(user);
 
     return res.json({
@@ -149,6 +157,10 @@ export const refreshAccessToken = async (req: Request, res: Response, next: Func
     const user = await UserModel.findById(payload.sub);
     if (!user) {
       return res.status(401).json({ message: "Invalid refresh token" });
+    }
+
+    if (user.status === "suspended") {
+      return res.status(403).json({ message: "Your account has been blocked. Please contact admin." });
     }
 
     const newAccessToken = signAccessJwt({

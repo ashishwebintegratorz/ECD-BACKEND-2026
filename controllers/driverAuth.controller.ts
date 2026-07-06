@@ -82,6 +82,10 @@ export const loginWithPin = asyncHandler(
     const user = await UserModel.findOne({ phone, role: "driver" });
     if (!user) throw new NotFoundException("Driver not found");
 
+    if (user.status === "suspended") {
+      throw new UnauthorizedException("Your account has been blocked. Please contact admin.");
+    }
+
     if (!user.pinHash) {
       throw new BadRequestException(
         "PIN not set. Please register via OTP first to set your PIN."
@@ -121,6 +125,10 @@ export const refreshTokenController = asyncHandler(
     const user = await UserModel.findById(payload.sub);
     if (!user || user.role !== "driver") {
       throw new UnauthorizedException("Unauthorized access");
+    }
+
+    if (user.status === "suspended") {
+      throw new UnauthorizedException("Your account has been blocked. Please contact admin.");
     }
 
     const auth = createAuthTokens(user);

@@ -5,7 +5,7 @@ import { emitOrderAssignedToDriver, emitOrderStatusUpdate } from "../socket/orde
 import { haversineDistance } from "../utils/delivery.utils.js";
 import { notifyDriverAssigned } from "./notification.service.js";
 
-const ASSIGNMENT_TIMEOUT_MS = 15000; // 15 seconds
+const ASSIGNMENT_TIMEOUT_MS = 60000; // 60 seconds (1 minute)
 
 /**
  * Handles the assignment flow for a driver, including real-time notifications
@@ -66,6 +66,8 @@ export const startAssignmentFlow = async (orderId: string, driverId: string) => 
             currentOrder.assignedDriver = undefined;
             currentOrder.deliveryStatus = "pending";
             currentOrder.assignmentTimeoutAt = undefined;
+            if (!currentOrder.rejectedDrivers) currentOrder.rejectedDrivers = [];
+            currentOrder.rejectedDrivers.push(driverId as any);
             await currentOrder.save();
 
             // Notify admin/system that assignment failed
@@ -101,8 +103,10 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
     let nearestDriverId = null;
     let minDistance = Infinity;
 
+    const excludedIds = [...excludeDriverIds, ...(order.rejectedDrivers || []).map((id: any) => id.toString())];
+
     for (const driver of onlineDrivers) {
-        if (excludeDriverIds.includes(driver._id.toString())) continue;
+        if (excludedIds.includes(driver._id.toString())) continue;
 
         // Check if driver has active order
         const activeOrder = await Order.findOne({
