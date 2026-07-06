@@ -1053,11 +1053,9 @@ export const getCancellationStats = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurantOrders = async (req: Request, res: Response) => {
   const { restaurantId } = req.params;
-  const orders = await Order.find({
-    store: restaurantId,
-    status: { $in: ["pending", "preparing", "ready"] }
-  })
+  const orders = await Order.find({ store: restaurantId })
     .sort({ createdAt: -1 })
+    .limit(100)
     .populate("customer", "name phone")
     .populate("assignedDriver", "name phone riderId");
 
