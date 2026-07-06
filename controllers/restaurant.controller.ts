@@ -335,6 +335,12 @@ export const getRestaurantMenu = async (req: Request, res: Response) => {
 // ADMIN: POST /api/restaurants/admin/create
 // ─────────────────────────────────────────────────────────────────────────────
 export const createRestaurant = async (req: Request, res: Response) => {
+    // Check onboarding limit
+    const totalRestaurants = await Restaurant.countDocuments();
+    if (totalRestaurants >= 1000) {
+        return res.status(400).json({ success: false, message: "Restaurant onboarding limit reached. Maximum 1000 restaurants allowed." });
+    }
+
     const { name, description, address, phone, email, logo, coverImage, accountDetail, lat, lng, categories, upi } = req.body;
 
     // Auto-generate slug if not provided, ensure uniqueness
