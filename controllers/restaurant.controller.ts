@@ -54,7 +54,7 @@ const toObjectId = (id: string) => new Types.ObjectId(id as string);
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurants = async (req: Request, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 10)); // cap at 1000
+    const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 50)); // cap at 1000
     const search = (req.query.search as string) || "";
     const storeType = (req.query.storeType as string) || "";
     const userLat = req.query.lat ? Number(req.query.lat) : null;
