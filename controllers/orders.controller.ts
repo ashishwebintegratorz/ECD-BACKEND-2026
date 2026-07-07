@@ -61,7 +61,7 @@ const logCancellation = (
 // ─────────────────────────────────────────────────────────────────────────────
 export const createOrder = async (req: Request, res: Response) => {
   const userId = (req as any).user.id;
-  const { addressId, paymentMethod, restaurantId, couponCode, address: rawAddress } = req.body;
+  const { addressId, paymentMethod, restaurantId, couponCode, address: rawAddress, deliveryPhone } = req.body;
 
   // Require real restaurant ID
   if (!restaurantId) {
@@ -207,6 +207,7 @@ export const createOrder = async (req: Request, res: Response) => {
       address: addressSnapshot,
       status: "pending",
       deliveryStatus: "pending",
+      deliveryPhone,
       driverEarnings,
       restaurantEarnings,
       riderAdminCommission: adminCommission,

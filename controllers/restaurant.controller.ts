@@ -541,20 +541,20 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const toggleRestaurantActive = async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
-    const { isActive } = req.body || {};
+    const { isOnline } = req.body || {};
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
         return res.status(404).json({ message: "Restaurant not found" });
     }
 
-    restaurant.isActive = isActive !== undefined ? isActive : !restaurant.isActive;
+    restaurant.isOnline = isOnline !== undefined ? isOnline : !restaurant.isOnline;
     await restaurant.save();
 
     return res.json({
         success: true,
-        message: `Restaurant is now ${restaurant.isActive ? "online" : "offline"}`,
-        isActive: restaurant.isActive,
+        message: `Restaurant is now ${restaurant.isOnline ? "online" : "offline"}`,
+        isOnline: restaurant.isOnline,
     });
 };
 
