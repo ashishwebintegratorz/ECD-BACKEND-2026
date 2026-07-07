@@ -57,6 +57,7 @@ export interface IOrder extends Document {
   rejectedDrivers: Types.ObjectId[];
   assignmentId?: Types.ObjectId;
   paymentTransaction?: Types.ObjectId;
+  deliveryPhone?: string;
   cancellationReason?: string;
   cancelledBy?: CancelledBy;
   cancellationLog: ICancellationLog[];
@@ -115,6 +116,7 @@ const OrderSchema = new Schema<IOrder>(
     rejectedDrivers: { type: [{ type: Schema.Types.ObjectId, ref: "User" }], default: [] },
     assignmentId: { type: Schema.Types.ObjectId, ref: "Assignment" },
     paymentTransaction: { type: Schema.Types.ObjectId, ref: "PaymentTransaction" },
+    deliveryPhone: { type: String },
     cancellationReason: { type: String },
     cancelledBy: { type: String, enum: ["customer", "restaurant", "driver", "admin"] },
     cancellationLog: { type: [CancellationLogSchema], default: [] },
