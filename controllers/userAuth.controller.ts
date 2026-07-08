@@ -12,6 +12,7 @@ import {
 } from "../utils/appError.js";
 import UserModel from "../models/User.model.js";
 import { verifyRefreshJwt, signAccessJwt } from "../utils/jwt.js";
+import admin from "../config/firebase.config.js";
 
 /**
  * CUSTOMER: Send OTP
@@ -111,3 +112,109 @@ export const refreshAccessToken = async (req: Request, res: Response, next: Func
     next(err);
   }
 };
+
+/**
+ * GOOGLE: Login (Verify Token)
+ */
+export const googleLoginController = asyncHandler(async (req: Request, res: Response) => {
+  const { idToken } = req.body;
+
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    
+    // Check if user already exists by googleId
+    let existingUser = await UserModel.findOne({ googleId: decodedToken.uid });
+
+    if (existingUser) {
+      const auth = createAuthTokens(existingUser);
+      return res.json({
+        token: auth.accessToken,
+        refreshToken: auth.refreshToken,
+        user: auth.user,
+      });
+    }
+
+    // STEP 7: Search by Email if googleId not found
+    if (decodedToken.email) {
+      existingUser = await UserModel.findOne({ email: decodedToken.email });
+
+      if (existingUser) {
+        existingUser.googleId = decodedToken.uid;
+        existingUser.provider = "google";
+        existingUser.emailVerified = true;
+
+        await existingUser.save();
+
+        const auth = createAuthTokens(existingUser);
+        return res.json({
+          token: auth.accessToken,
+          refreshToken: auth.refreshToken,
+          user: auth.user,
+        });
+      }
+    }
+    
+    // If user completely not found, do not create them yet.
+    // Return Google details to the frontend to prompt for a phone number.
+    return res.json({
+      requiresPhoneVerification: true,
+      googleUser: {
+        googleId: decodedToken.uid,
+        email: decodedToken.email,
+        name: decodedToken.name,
+        avatar: decodedToken.picture,
+      },
+    });
+  } catch (error: any) {
+    throw new UnauthorizedException(`Firebase token verification failed: ${error.message}`);
+  }
+});
+
+/**
+ * GOOGLE: Verify Phone (After Google Login)
+ */
+export const verifyGooglePhoneController = asyncHandler(async (req: Request, res: Response) => {
+  const { phone, otp, googleId, email, name, avatar } = req.body;
+
+  if (!phone || !otp || !googleId) {
+    throw new BadRequestException("Phone, OTP, and googleId are required");
+  }
+
+  // 1. Verify the OTP
+  const verification = await verifyOtp(phone, otp);
+  if (!verification.ok) {
+    throw new BadRequestException(verification.reason || "Invalid OTP");
+  }
+
+  // 2. Find existing user by phone
+  let user = await UserModel.findOne({ phone });
+
+  if (user) {
+    // STEP 13: Check Phone -> If exists, return error
+    return res.status(400).json({
+      message: "Phone already registered"
+    });
+  }
+
+  // STEP 14: Create User
+  user = await UserModel.create({
+    phone,
+    email: email || undefined,
+    googleId,
+    provider: "google",
+    avatar: avatar || undefined,
+    name: name || undefined,
+    emailVerified: true,
+    role: "customer",
+    isVerified: true,
+  });
+
+  // 4. Generate Tokens
+  const auth = createAuthTokens(user);
+
+  return res.json({
+    token: auth.accessToken,
+    refreshToken: auth.refreshToken,
+    user: auth.user,
+  });
+});

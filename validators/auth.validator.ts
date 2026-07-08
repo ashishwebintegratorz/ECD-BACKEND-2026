@@ -31,3 +31,20 @@ export const refreshTokenSchema = z.object({
     refreshToken: z.string().min(10),
   }),
 });
+
+export const googleLoginSchema = z.object({
+  body: z.object({
+    idToken: z.string().min(1, "idToken is required"),
+  }),
+});
+
+export const verifyGooglePhoneSchema = z.object({
+  body: z.object({
+    phone: phoneSchema,
+    otp: z.string().length(4, "OTP must be 4 digits"),
+    googleId: z.string().min(1, "googleId is required"),
+    email: z.string().email("Invalid email").optional(),
+    name: z.string().min(2, "Name must be at least 2 characters").optional(),
+    avatar: z.string().url("Invalid avatar URL").optional(),
+  }),
+});

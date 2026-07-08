@@ -10,6 +10,9 @@ export interface IUser extends Document {
   pinHash?: string;
   avatar?: string;
   email?: string;
+  googleId?: string;
+  provider?: "phone" | "google";
+  emailVerified?: boolean;
   addresses?: Types.ObjectId[];
   isOnline: boolean;
   isReturning: boolean;
@@ -40,6 +43,9 @@ const UserSchema = new Schema<IUser>(
     pinHash: { type: String },
     avatar: { type: String },
     email: { type: String, index: true, sparse: true },
+    googleId: { type: String, unique: true, sparse: true },
+    provider: { type: String, enum: ["phone", "google"], default: "phone" },
+    emailVerified: { type: Boolean, default: false },
     addresses: [{ type: Schema.Types.ObjectId, ref: "Address" }],
     isOnline: { type: Boolean, default: false, index: true },
     isReturning: { type: Boolean, default: false, index: true },

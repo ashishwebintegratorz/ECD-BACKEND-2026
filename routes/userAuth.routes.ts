@@ -5,6 +5,8 @@ import {
   sendOtpSchema,
   verifyOtpSchema,
   refreshTokenSchema,
+  googleLoginSchema,
+  verifyGooglePhoneSchema,
 } from "../validators/auth.validator.js";
 
 const router = Router();
@@ -17,5 +19,8 @@ router.post(
   authCtrl.refreshTokenController
 );
 router.post("/refresh", authCtrl.refreshAccessToken);
+
+router.post("/google", validate(googleLoginSchema), authCtrl.googleLoginController);
+router.post("/verify-google-phone", validate(verifyGooglePhoneSchema), authCtrl.verifyGooglePhoneController);
 
 export default router;
