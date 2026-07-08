@@ -666,7 +666,8 @@ export const getRestaurantOrderHistory = async (req: Request, res: Response) => 
         deliveryStatus: { $in: ["picked_up", "delivered"] },
     })
         .sort({ createdAt: -1 })
-        .select("orderNumber payableAmount status deliveryStatus createdAt")
+        .populate("customer", "name phone")
+        .populate("assignedDriver", "name phone")
         .lean();
 
     return res.json({
@@ -771,5 +772,57 @@ export const restaurantVerifyOtp = async (req: Request, res: Response) => {
         _id: restaurant._id,
         restaurantId: restaurant.restaurantId,
         message: "Login successful"
+    });
+};
+
+// "?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?
+// DASHBOARD STATS
+// "?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?"?
+export const getDashboardStats = async (req: Request, res: Response) => {
+    const { restaurantId } = req.params;
+    const filter = (req.query.filter as string) || "today";
+
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+        return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    const matchQuery: any = {
+        store: restaurant._id,
+        deliveryStatus: { $in: ["picked_up", "delivered"] }
+    };
+
+    const now = new Date();
+    if (filter === "today") {
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        matchQuery.createdAt = { $gte: startOfDay };
+    } else if (filter === "7_days") {
+        const startOf7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        matchQuery.createdAt = { $gte: startOf7Days };
+    } else if (filter === "1_month") {
+        const startOf30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        matchQuery.createdAt = { $gte: startOf30Days };
+    }
+
+    const stats = await Order.aggregate([
+        {
+            $match: matchQuery
+        },
+        {
+            $group: {
+                _id: null,
+                totalOrders: { $sum: 1 },
+                totalEarnings: { $sum: "$restaurantEarnings" }
+            }
+        }
+    ]);
+
+    const totalOrders = stats.length > 0 ? stats[0].totalOrders : 0;
+    const totalEarnings = stats.length > 0 ? stats[0].totalEarnings : 0;
+
+    return res.json({
+        success: true,
+        totalOrders,
+        totalEarnings
     });
 };

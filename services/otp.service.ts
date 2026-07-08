@@ -68,8 +68,13 @@ export async function createAndSendOtp(
     const apiKey = process.env.TWO_FACTOR_API_KEY;
     if (apiKey) {
       const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKARTOTP`;
-      const response = await axios.get(url);
-      console.log("[2Factor OTP] Sent successfully:", response.data);
+      // COMEMENTED OUT FOR TESTING TO SAVE CREDITS
+      // const response = await axios.get(url);
+      // console.log("[2Factor OTP] Sent successfully:", response.data);
+      console.log(`\n=========================================`);
+      console.log(`[TESTING OTP] Send to ${phone}`);
+      console.log(`[TESTING OTP] Code is: ${code}`);
+      console.log(`=========================================\n`);
     } else {
       console.log("[2Factor OTP] API key missing, skipped sending");
     }
@@ -86,8 +91,13 @@ export async function sendPickupOtpSms(phone: string, code: string) {
     const apiKey = process.env.TWO_FACTOR_API_KEY;
     if (apiKey) {
       const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKARTOTP`;
-      const response = await axios.get(url);
-      console.log(`[2Factor OTP] Pickup OTP sent to ${phone}:`, response.data);
+      // COMEMENTED OUT FOR TESTING TO SAVE CREDITS
+      // const response = await axios.get(url);
+      // console.log(`[2Factor OTP] Pickup OTP sent to ${phone}:`, response.data);
+      console.log(`\n=========================================`);
+      console.log(`[TESTING PICKUP OTP] Send to ${phone}`);
+      console.log(`[TESTING PICKUP OTP] Code is: ${code}`);
+      console.log(`=========================================\n`);
     } else {
       console.log(`[2Factor OTP] API key missing, skipped sending pickup OTP to ${phone}`);
     }

@@ -18,7 +18,8 @@ import {
     getRestaurantOrderHistory,
     payoutRestaurant,
     restaurantSendOtp,
-    restaurantVerifyOtp
+    restaurantVerifyOtp,
+    getDashboardStats
 } from "../controllers/restaurant.controller.js";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
@@ -70,7 +71,11 @@ router.post("/verify-otp", asyncHandler(restaurantVerifyOtp));
 router.get("/:restaurantId/profile", jwtAuth, requireRole("admin"), asyncHandler(getRestaurantProfile));
 
 // GET /api/restaurants/:restaurantId/order-history
+// GET /api/restaurants/:restaurantId/order-history
 router.get("/:restaurantId/order-history", jwtAuth, requireRole("admin"), asyncHandler(getRestaurantOrderHistory));
+
+// GET /api/restaurants/:restaurantId/dashboard-stats
+router.get("/:restaurantId/dashboard-stats", jwtAuth, requireRole("admin"), asyncHandler(getDashboardStats));
 
 // POST /api/restaurants/:restaurantId/payout
 router.post("/:restaurantId/payout", jwtAuth, requireRole("admin"), asyncHandler(payoutRestaurant));
