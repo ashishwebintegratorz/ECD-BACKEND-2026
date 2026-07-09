@@ -54,12 +54,22 @@ const toObjectId = (id: string) => new Types.ObjectId(id as string);
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurants = async (req: Request, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 10)); // cap at 1000
+    const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 50)); // cap at 1000
     const search = (req.query.search as string) || "";
     const storeType = (req.query.storeType as string) || "";
     const userLat = req.query.lat ? Number(req.query.lat) : null;
     const userLng = req.query.lng ? Number(req.query.lng) : null;
     const hasCoords = userLat !== null && userLng !== null;
+
+    const dietary = req.query.dietary ? String(req.query.dietary) : undefined; // "Veg" or "Non-Veg"
+    
+    const parseNum = (val: any) => val && !isNaN(Number(val)) ? Number(val) : null;
+    const minPrice = parseNum(req.query.minPrice);
+    const maxPrice = parseNum(req.query.maxPrice);
+    const minRating = parseNum(req.query.minRating);
+    const maxDistance = parseNum(req.query.maxDistance);
+    
+    const status = req.query.status ? String(req.query.status) : undefined; // "Open Now" or "Closed"
 
     const filter: any = { isActive: true };
     if (storeType) filter.storeType = storeType;
@@ -70,6 +80,29 @@ export const getRestaurants = async (req: Request, res: Response) => {
         ];
     }
 
+    if (dietary === "Veg") {
+        filter["menu.foodType"] = { $in: ["veg", "vegan"] };
+    } else if (dietary === "Non-Veg") {
+        filter["menu.foodType"] = "non-veg";
+    }
+
+    if (minPrice !== null || maxPrice !== null) {
+        filter["menu.price"] = {};
+        if (minPrice !== null) filter["menu.price"].$gte = minPrice;
+        if (maxPrice !== null) filter["menu.price"].$lte = maxPrice;
+    }
+
+    if (minRating !== null) {
+        filter.adminRating = { $gte: minRating };
+    }
+
+    if (status === "Open Now") {
+        filter.isOnline = true;
+    } else if (status === "Closed") {
+        filter.isOnline = false;
+    }
+
+    console.log("Filtering Restaurants with:", JSON.stringify(filter));
     // When no coords: sort entirely in DB — fast, uses compound index
     if (!hasCoords) {
         const [restaurants, total] = await Promise.all([
@@ -88,6 +121,7 @@ export const getRestaurants = async (req: Request, res: Response) => {
             totalPages: Math.ceil(total / limit),
             page,
             limit,
+            debugFilter: filter
         });
     }
 
@@ -107,6 +141,7 @@ export const getRestaurants = async (req: Request, res: Response) => {
                 // _score intentionally excluded from response below
             };
         })
+        .filter((r) => maxDistance === null || r.distanceKm <= maxDistance)
         .sort((a, b) => {
             const scoreA = rankScore(a.adminRating, a.orderCount, a.featured, a.distanceKm);
             const scoreB = rankScore(b.adminRating, b.orderCount, b.featured, b.distanceKm);
@@ -335,6 +370,12 @@ export const getRestaurantMenu = async (req: Request, res: Response) => {
 // ADMIN: POST /api/restaurants/admin/create
 // ─────────────────────────────────────────────────────────────────────────────
 export const createRestaurant = async (req: Request, res: Response) => {
+    // Check onboarding limit
+    const totalRestaurants = await Restaurant.countDocuments();
+    if (totalRestaurants >= 1000) {
+        return res.status(400).json({ success: false, message: "Restaurant onboarding limit reached. Maximum 1000 restaurants allowed." });
+    }
+
     const { name, description, address, phone, email, logo, coverImage, accountDetail, lat, lng, categories, upi } = req.body;
 
     // Auto-generate slug if not provided, ensure uniqueness
