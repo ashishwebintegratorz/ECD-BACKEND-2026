@@ -106,6 +106,26 @@ export async function sendPickupOtpSms(phone: string, code: string) {
   }
 }
 
+export async function sendDeliveryOtpSms(phone: string, code: string) {
+  try {
+    console.log(`\n=========================================`);
+    console.log(`[TESTING DELIVERY OTP] Send to ${phone}`);
+    console.log(`[TESTING DELIVERY OTP] Code is: ${code}`);
+    console.log(`=========================================\n`);
+
+    const apiKey = process.env.TWO_FACTOR_API_KEY;
+    if (apiKey) {
+      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKARTOTP`;
+      // COMEMENTED OUT FOR TESTING TO SAVE CREDITS
+      // const response = await axios.get(url);
+    } else {
+      console.log(`[2Factor OTP] API key missing, skipped sending delivery OTP SMS to ${phone}`);
+    }
+  } catch (error: any) {
+    console.error("[2Factor OTP] Failed to send delivery OTP:", error.message || error);
+  }
+}
+
 export async function verifyOtp(
   phone: string,
   code: string

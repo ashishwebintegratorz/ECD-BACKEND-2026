@@ -31,7 +31,7 @@ import { calculateDeliveryCharge, isWithinIndore, haversineDistance } from "../u
 import Restaurant from "../models/Restaurant.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
 import DeliverySetting from "../models/DeliverySetting.model.js";
-import { sendPickupOtpSms } from "../services/otp.service.js";
+import { sendPickupOtpSms, sendDeliveryOtpSms } from "../services/otp.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: generate a 4-digit numeric OTP
@@ -691,8 +691,21 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
   const order = await Order.findOne({ _id: orderId, assignedDriver: driverId });
   if (!order) return res.status(404).json({ message: "Order not found or not assigned to you" });
 
-  // Delivery OTP check removed as per requirement
+  // Delivery OTP check
   if (status === "delivered") {
+    if (!otp) {
+      return res.status(400).json({ message: "Delivery OTP is required. Please ask the customer for the 4-digit code." });
+    }
+
+    const customer = await User.findById(order.customer);
+    if (!customer) {
+      return res.status(404).json({ message: "Customer not found" });
+    }
+
+    if (String(otp) !== String(customer.deliveryOtp) && String(otp) !== String(order.deliveryOTP)) {
+      return res.status(400).json({ message: "Invalid delivery OTP. Please ask the customer for the correct 4-digit code." });
+    }
+
     // Credit driver's wallet with driverEarnings or deliveryCharge
     const finalEarnings = order.driverEarnings || order.deliveryCharge || 0;
     if (finalEarnings > 0) {
@@ -1098,6 +1111,41 @@ export const sendPickupOtp = async (req: Request, res: Response) => {
   }
 
   return res.json({ message: "OTP sent successfully via SMS" });
+};
+
+// ─── DRIVER: Send Delivery OTP to Customer ──────────────────────────────────────────────
+export const sendDeliveryOtp = async (req: Request, res: Response) => {
+  const orderId = req.params.orderId as string;
+  const order = await Order.findById(orderId);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  if (!order.deliveryOTP) {
+    return res.status(400).json({ message: "No delivery OTP generated for this order" });
+  }
+
+  // Log to terminal for debugging
+  console.log(`\n===========================================`);
+  console.log(`[DRIVER DELIVERY OTP]`);
+  console.log(`Order ID: ${order._id}`);
+  console.log(`>>> OTP CODE: ${order.deliveryOTP} <<<`);
+  console.log(`===========================================\n`);
+
+  // Ensure customer exists and has phone number
+  if (order.customer) {
+    const customer = await User.findById(order.customer);
+    if (customer && customer.phone) {
+      // Sync it to user doc for older verification method just in case
+      customer.deliveryOtp = order.deliveryOTP;
+      await customer.save();
+
+      console.log(`[Delivery OTP] Sending SMS to customer ${customer.name} at ${customer.phone}`);
+      sendDeliveryOtpSms(customer.phone, order.deliveryOTP);
+    } else {
+      console.log(`[Delivery OTP] Customer not found or no phone number`);
+    }
+  }
+
+  return res.json({ message: "Delivery OTP sent successfully to customer" });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -28,6 +28,7 @@ import {
   restaurantMarkPreparing,
   restaurantVerifyPickup,
   sendPickupOtp,
+  sendDeliveryOtp,
   calculateDeliveryFee,
 } from "../controllers/orders.controller.js";
 
@@ -63,6 +64,7 @@ router.post("/restaurant/send-pickup-otp/:orderId", jwtAuth, requireRole("admin"
 // ─── Driver ───────────────────────────────────────────────────────────────────
 router.get("/driver/my-orders", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(getDriverOrders));
 router.post("/driver/send-pickup-otp/:orderId", jwtAuth, requireRole("driver"), asyncHandler(sendPickupOtp));
+router.post("/driver/send-delivery-otp/:orderId", jwtAuth, requireRole("driver"), asyncHandler(sendDeliveryOtp));
 router.patch("/driver/accept/:orderId", jwtAuth, requireRole("driver"), asyncHandler(driverAcceptOrder));
 router.patch("/driver/decline/:orderId", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(driverDeclineOrder));
 router.put("/driver/update-status/:orderId", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(updateOrderByDriver));

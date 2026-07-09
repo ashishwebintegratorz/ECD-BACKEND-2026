@@ -13,7 +13,7 @@ export const getActiveOrder = asyncHandler(async (req: Request, res: Response) =
     const order = await Order.findOne({
         assignedDriver: driverId,
         deliveryStatus: { $in: ["accepted", "assigned", "picked_up", "out_for_delivery", "reached_store", "driver_notified"] }
-    }).populate("store").populate("customer", "name phone avatar").populate("address");
+    }).populate("store").populate("customer", "name phone avatar").populate("address").populate("paymentTransaction");
 
     if (!order) return res.json({ order: null });
 
