@@ -454,8 +454,8 @@ export const restaurantCancelOrder = async (req: Request, res: Response) => {
   const order = await Order.findById(orderId);
   if (!order) return res.status(404).json({ message: "Order not found" });
 
-  if (!["pending", "preparing"].includes(order.status))
-    return res.status(400).json({ message: "Order can only be cancelled while pending or preparing" });
+  if (!["pending", "preparing", "ready"].includes(order.status))
+    return res.status(400).json({ message: "Order can only be cancelled while pending, preparing, or ready (before rider pickup)" });
 
   order.status = "cancelled";
   order.cancelledBy = "restaurant";
@@ -1182,7 +1182,7 @@ export const restaurantVerifyPickup = async (req: Request, res: Response) => {
   const orderId = req.params.orderId as string;
   const { otp } = req.body;
 
-  const order = await Order.findById(orderId);
+  const order = await Order.findById(orderId).populate("assignedDriver", "name phone");
   if (!order) return res.status(404).json({ message: "Order not found" });
 
   if (order.status !== "ready") {
@@ -1215,8 +1215,9 @@ export const restaurantVerifyPickup = async (req: Request, res: Response) => {
     deliveryStatus: order.deliveryStatus,
     message: "Order picked up by rider",
     updatedAt: (order as any).updatedAt,
+    driverName: (order.assignedDriver as any)?.name || "Rider",
+    driverPhone: (order.assignedDriver as any)?.phone || "",
   });
 
   return res.json({ success: true, message: "OTP verified. Order handed over.", order });
 };
-
