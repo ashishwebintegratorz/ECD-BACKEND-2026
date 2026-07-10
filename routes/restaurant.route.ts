@@ -19,7 +19,11 @@ import {
     payoutRestaurant,
     restaurantSendOtp,
     restaurantVerifyOtp,
-    getDashboardStats
+    getDashboardStats,
+    vendorAddMenuItem,
+    vendorToggleMenuItem,
+    adminApproveMenuItem,
+    getPendingMenuItems
 } from "../controllers/restaurant.controller.js";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
@@ -151,6 +155,40 @@ router.delete(
     jwtAuth,
     requireRole("admin"),
     asyncHandler(deleteMenuItem)
+);
+
+
+
+// POST /api/restaurants/vendor/menu/add/:restaurantId
+router.post(
+    "/vendor/menu/add/:restaurantId",
+    jwtAuth,
+    asyncHandler(vendorAddMenuItem)
+);
+
+// PATCH /api/restaurants/vendor/menu/toggle/:restaurantId/:itemId
+router.patch(
+    "/vendor/menu/toggle/:restaurantId/:itemId",
+    jwtAuth,
+    asyncHandler(vendorToggleMenuItem)
+);
+
+// PATCH /api/restaurants/admin/menu/approve/:restaurantId/:itemId
+router.patch(
+    "/admin/menu/approve/:restaurantId/:itemId",
+    jwtAuth,
+    requireRole("admin"),
+    asyncHandler(adminApproveMenuItem)
+);
+
+
+
+// GET /api/restaurants/admin/menu/pending
+router.get(
+    "/admin/menu/pending",
+    jwtAuth,
+    requireRole("admin"),
+    asyncHandler(getPendingMenuItems)
 );
 
 export default router;

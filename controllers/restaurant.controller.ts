@@ -7,6 +7,7 @@ import { NotFoundException, BadRequestException } from "../utils/appError.js";
 import { slugify } from "../validators/restaurant.validator.js";
 import { Types } from "mongoose";
 import { createAndSendOtp, verifyOtp } from "../services/otp.service.js";
+import Notification from "../models/Notification.model.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -866,4 +867,160 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         totalOrders,
         totalEarnings
     });
+};
+
+
+// ============================================================================
+// MENU MANAGEMENT BY VENDOR & ADMIN APPROVAL
+// ============================================================================
+
+export const vendorAddMenuItem = async (req: Request, res: Response) => {
+    try {
+        const { restaurantId } = req.params;
+        const { name, description, b2bPrice, image, foodType } = req.body;
+
+        const restaurant = await Restaurant.findOne({
+            $or: [
+                { restaurantId: restaurantId },
+                ...(Types.ObjectId.isValid(restaurantId) ? [{ _id: restaurantId }] : [])
+            ]
+        });
+        if (!restaurant) {
+            return res.status(404).json({ success: false, message: "Restaurant not found" });
+        }
+
+        const newItem = {
+            name,
+            description,
+            price: 0, // Admin sets this later
+            b2bPrice: Number(b2bPrice) || 0,
+            image,
+            foodType,
+            isAvailable: false, // Default not available until approved
+            approvalStatus: "pending" as any
+        };
+
+        restaurant.menu.push(newItem);
+        await restaurant.save();
+
+        // Create a notification for admin
+        await Notification.create({
+            title: "New Menu Item Pending Approval",
+            body: `Restaurant ${restaurant.name} added "${name}". Please review and set the selling price.`,
+            type: "admin"
+        });
+
+        return res.status(201).json({
+            success: true,
+            message: "Menu item submitted for approval",
+            menu: restaurant.menu
+        });
+    } catch (error: any) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const vendorToggleMenuItem = async (req: Request, res: Response) => {
+    try {
+        const { restaurantId, itemId } = req.params;
+        const { isAvailable } = req.body;
+
+        const restaurant = await Restaurant.findOne({
+            $or: [
+                { restaurantId: restaurantId },
+                ...(Types.ObjectId.isValid(restaurantId) ? [{ _id: restaurantId }] : [])
+            ]
+        });
+        if (!restaurant) {
+            return res.status(404).json({ success: false, message: "Restaurant not found" });
+        }
+
+        const menuItem = restaurant.menu.find(m => (m as any)._id.toString() === itemId);
+        if (!menuItem) {
+            return res.status(404).json({ success: false, message: "Menu item not found" });
+        }
+
+        menuItem.isAvailable = isAvailable;
+        await restaurant.save();
+
+        return res.json({
+            success: true,
+            message: "Menu item availability updated",
+            menu: restaurant.menu
+        });
+    } catch (error: any) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const adminApproveMenuItem = async (req: Request, res: Response) => {
+    try {
+        const { restaurantId, itemId } = req.params;
+        const { approvalStatus, price } = req.body;
+
+        const restaurant = await Restaurant.findOne({
+            $or: [
+                { restaurantId: restaurantId },
+                ...(Types.ObjectId.isValid(restaurantId) ? [{ _id: restaurantId }] : [])
+            ]
+        });
+        if (!restaurant) {
+            return res.status(404).json({ success: false, message: "Restaurant not found" });
+        }
+
+        const menuItem = restaurant.menu.find(m => (m as any)._id.toString() === itemId) as any;
+        if (!menuItem) {
+            return res.status(404).json({ success: false, message: "Menu item not found" });
+        }
+
+        if (approvalStatus) {
+            menuItem.approvalStatus = approvalStatus;
+            if (approvalStatus === "approved") {
+                menuItem.isAvailable = true;
+            }
+        }
+        if (price !== undefined) {
+            menuItem.price = Number(price);
+        }
+
+        await restaurant.save();
+
+        return res.json({
+            success: true,
+            message: "Menu item updated successfully",
+            menu: restaurant.menu
+        });
+    } catch (error: any) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+
+export const getPendingMenuItems = async (req: Request, res: Response) => {
+    try {
+        const restaurants = await Restaurant.find({ "menu.approvalStatus": "pending" });
+        const pendingItems: any[] = [];
+        
+        restaurants.forEach(rest => {
+            rest.menu.forEach(item => {
+                if ((item as any).approvalStatus === "pending") {
+                    pendingItems.push({
+                        restaurantId: rest.restaurantId,
+                        restaurantName: rest.name,
+                        _id: (item as any)._id,
+                        name: item.name,
+                        description: item.description,
+                        b2bPrice: item.b2bPrice,
+                        image: item.image,
+                        foodType: item.foodType,
+                        approvalStatus: (item as any).approvalStatus
+                    });
+                }
+            });
+        });
+        
+        return res.json({ success: true, pendingItems });
+    } catch (error: any) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
 };
