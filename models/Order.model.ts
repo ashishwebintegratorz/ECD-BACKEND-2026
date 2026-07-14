@@ -18,6 +18,7 @@ export type DeliveryStatus =
   | "picked_up"         // driver collected the food
   | "out_for_delivery"
   | "delivered"
+  | "self_pickup"       // no driver involved
   | "cancelled"
   | "failed";
 
@@ -40,8 +41,12 @@ export interface IOrderItem {
   subtotal: number;
 }
 
+export type OrderType = "delivery" | "pickup";
+
 export interface IOrder extends Document {
   orderNumber: string;
+  orderType: OrderType;
+  pickupTime?: string;
   customer: Types.ObjectId;
   store: Types.ObjectId;         // generic ref — works for both restaurant and grocery
   items: IOrderItem[];
@@ -101,6 +106,8 @@ const CancellationLogSchema = new Schema<ICancellationLog>(
 const OrderSchema = new Schema<IOrder>(
   {
     orderNumber: { type: String, required: true, unique: true, index: true },
+    orderType: { type: String, enum: ["delivery", "pickup"], default: "delivery" },
+    pickupTime: { type: String },
     customer: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     store: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
     items: { type: [OrderItemSchema], required: true },
