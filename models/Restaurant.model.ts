@@ -36,6 +36,8 @@ export interface IRestaurant extends Document {
     isOnline: boolean;             // Vendor online/offline status
     restaurantKey: string;         // 14-digit login code
     adminRating: number;
+    avgRating: number;
+    totalReviews: number;
     featured: boolean;
     orderCount: number;
     walletBalance: number;         // Current bucket/earnings balance
@@ -89,6 +91,8 @@ const RestaurantSchema = new Schema<IRestaurant>(
         isOnline: { type: Boolean, default: false, index: true },
         restaurantKey: { type: String, required: true, unique: true },
         adminRating: { type: Number, default: 0, min: 0, max: 5 },
+        avgRating: { type: Number, default: 0, min: 0, max: 5 },
+        totalReviews: { type: Number, default: 0 },
         featured: { type: Boolean, default: false, index: true },
         orderCount: { type: Number, default: 0 },
         walletBalance: { type: Number, default: 0 },

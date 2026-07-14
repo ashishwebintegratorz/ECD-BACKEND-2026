@@ -2,8 +2,9 @@ import mongoose, {Schema, Document} from "mongoose";
 
 export interface IReview extends Document{
     user: mongoose.Types.ObjectId;
-    order?: mongoose.Types.ObjectId
-    type: "app" | "delivery";
+    order?: mongoose.Types.ObjectId;
+    restaurant?: mongoose.Types.ObjectId;
+    type: "app" | "delivery" | "restaurant";
     rating: number;
     comment: string;
     isHidden: boolean;
@@ -21,9 +22,13 @@ const ReviewSchema = new Schema<IReview>(
             type: Schema.Types.ObjectId,
             ref: "Order"
         },
+        restaurant: {
+            type: Schema.Types.ObjectId,
+            ref: "Restaurant"
+        },
         type: {
             type: String,
-            enum: ["app", "delivery"],
+            enum: ["app", "delivery", "restaurant"],
             required: true
         },
         rating: {

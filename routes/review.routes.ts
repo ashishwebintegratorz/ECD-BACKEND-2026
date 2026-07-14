@@ -9,6 +9,8 @@ import {
   deleteMyReview,
   hideReview,
   deleteReview,
+  addRestaurantReview,
+  getRestaurantReviews,
 } from "../controllers/review.controller.js";
 
 const router = Router();
@@ -17,6 +19,9 @@ const router = Router();
 router.post("/", jwtAuth, asyncHandler(createReview));
 router.get("/my", jwtAuth, asyncHandler(getMyReviews));
 router.delete("/:reviewId", jwtAuth, asyncHandler(deleteMyReview));
+
+router.post("/restaurant", jwtAuth, asyncHandler(addRestaurantReview));
+router.get("/restaurant/:restaurantId", asyncHandler(getRestaurantReviews));
 
 //Admin Routes
 router.get("/all", jwtAuth, requireRole("admin"), asyncHandler(getAllReviews));

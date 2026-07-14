@@ -61,7 +61,7 @@ const logCancellation = (
 // ─────────────────────────────────────────────────────────────────────────────
 export const createOrder = async (req: Request, res: Response) => {
   const userId = (req as any).user.id;
-  const { addressId, paymentMethod, restaurantId, couponCode, address: rawAddress, deliveryPhone } = req.body;
+  const { addressId, paymentMethod, restaurantId, couponCode, address: rawAddress, deliveryPhone, orderType, pickupTime } = req.body;
 
   // Require real restaurant ID
   if (!restaurantId) {
@@ -80,15 +80,19 @@ export const createOrder = async (req: Request, res: Response) => {
     addressDoc = rawAddress;
   }
 
-  if (!addressDoc) return res.status(400).json({ message: "Address or Address ID is required" });
+  if (!addressDoc && orderType !== "pickup") {
+    return res.status(400).json({ message: "Address or Address ID is required for delivery" });
+  }
 
-  const { location } = addressDoc;
-  if (!location?.coordinates || location.coordinates.length < 2)
-    return res.status(400).json({ message: "Location coordinates are required" });
+  if (orderType !== "pickup") {
+    const { location } = addressDoc;
+    if (!location?.coordinates || location.coordinates.length < 2)
+      return res.status(400).json({ message: "Location coordinates are required" });
 
-  const [lng, lat] = location.coordinates;
-  if (!isWithinIndore(lat, lng))
-    return res.status(400).json({ message: "Delivery is only available in Indore" });
+    const [lng, lat] = location.coordinates;
+    if (!isWithinIndore(lat, lng))
+      return res.status(400).json({ message: "Delivery is only available in Indore" });
+  }
 
   const cart = await Cart.findOne({ user: userId });
   if (!cart || cart.items.length === 0)
@@ -102,13 +106,22 @@ export const createOrder = async (req: Request, res: Response) => {
     return res.status(400).json({ message: stockCheck.message });
   */
 
-  const addressSnapshot = {
-    fullAddress: addressDoc.fullAddress,
-    apartment: addressDoc.apartment,
-    landmark: addressDoc.landmark,
-    location: addressDoc.location,
-    phone: addressDoc.phone,
-  };
+  let addressSnapshot;
+  if (orderType === "pickup") {
+    addressSnapshot = {
+      fullAddress: "Self-Pickup",
+      location: { type: "Point", coordinates: [0, 0] },
+      phone: deliveryPhone || (req as any).user.phone || "",
+    };
+  } else {
+    addressSnapshot = {
+      fullAddress: addressDoc.fullAddress,
+      apartment: addressDoc.apartment,
+      landmark: addressDoc.landmark,
+      location: addressDoc.location,
+      phone: addressDoc.phone,
+    };
+  }
 
   const totalAmount = cart.items.reduce((s, i) => s + i.priceAtAdd * i.qty, 0);
   if (totalAmount < 100)
@@ -141,7 +154,7 @@ export const createOrder = async (req: Request, res: Response) => {
   let adminCommission = 0;
   let deliveryCharge = 0;
 
-  if (store && addressDoc.location?.coordinates && store.location?.coordinates) {
+  if (store && addressDoc?.location?.coordinates && store.location?.coordinates) {
     const [custLng, custLat] = addressDoc.location.coordinates;
     const [storeLng, storeLat] = store.location.coordinates;
     
@@ -157,11 +170,16 @@ export const createOrder = async (req: Request, res: Response) => {
         ? (isNightShift ? settings.nightShift : settings.morningShift)
         : { riderFeePerKm: 10, adminCommissionPerKm: 2 }; // Fallback
 
-    driverEarnings = Math.max(15, Math.ceil(distanceKm * activeShift.riderFeePerKm));
-    adminCommission = Math.ceil(distanceKm * activeShift.adminCommissionPerKm);
-    
-    // Total delivery charge shown to user is Rider Fee + Admin Commission
-    deliveryCharge = driverEarnings + adminCommission;
+    if (orderType === "pickup") {
+      driverEarnings = 0;
+      adminCommission = 0;
+      deliveryCharge = 0;
+    } else {
+      driverEarnings = Math.max(15, Math.ceil(distanceKm * activeShift.riderFeePerKm));
+      adminCommission = Math.ceil(distanceKm * activeShift.adminCommissionPerKm);
+      // Total delivery charge shown to user is Rider Fee + Admin Commission
+      deliveryCharge = driverEarnings + adminCommission;
+    }
   }
 
   // ── GST Calculation (5% for Restaurants) ──────────────────────────────────
@@ -206,8 +224,10 @@ export const createOrder = async (req: Request, res: Response) => {
       payableAmount,
       address: addressSnapshot,
       status: "pending",
-      deliveryStatus: "pending",
+      deliveryStatus: orderType === "pickup" ? "self_pickup" : "pending",
       deliveryPhone,
+      orderType: orderType === "pickup" ? "pickup" : "delivery",
+      pickupTime: orderType === "pickup" ? pickupTime : undefined,
       driverEarnings,
       restaurantEarnings,
       riderAdminCommission: adminCommission,
@@ -417,28 +437,41 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
   // Push: order ready
   notifyOrderReady(order.customer.toString(), order.orderNumber).catch(() => { });
 
-  emitOrderStatusUpdate(orderId, {
-    status: order.status,
-    deliveryStatus: order.deliveryStatus,
-    message: "Your order is ready. A rider will be assigned shortly.",
-    updatedAt: (order as any).updatedAt,
-  });
+  let message = "Order marked as ready. Assigning nearest rider...";
+  let assigned: any = false;
 
-  // Auto-assign to nearest available driver
-  const assigned = await assignToNearestDriver(orderId).catch(err => {
-    console.error(`[Auto-Assign] Failed to auto assign order ${orderId}:`, err);
-    return false;
-  });
-
-  if (assigned === false) {
-    return res.json({ 
-        message: "Rider is offline or none available. Not showing rider.", 
-        driverNotFound: true, 
-        order 
+  if (order.orderType === "pickup") {
+    message = "Order marked as ready for self-pickup.";
+    emitOrderStatusUpdate(orderId, {
+      status: order.status,
+      deliveryStatus: order.deliveryStatus,
+      message: "Your order is ready for pickup. Please collect it from the restaurant.",
+      updatedAt: (order as any).updatedAt,
     });
+  } else {
+    emitOrderStatusUpdate(orderId, {
+      status: order.status,
+      deliveryStatus: order.deliveryStatus,
+      message: "Your order is ready. A rider will be assigned shortly.",
+      updatedAt: (order as any).updatedAt,
+    });
+
+    // Auto-assign to nearest available driver
+    assigned = await assignToNearestDriver(orderId).catch(err => {
+      console.error(`[Auto-Assign] Failed to auto assign order ${orderId}:`, err);
+      return false;
+    });
+
+    if (assigned === false) {
+      return res.json({ 
+          message: "Rider is offline or none available. Not showing rider.", 
+          driverNotFound: true, 
+          order 
+      });
+    }
   }
 
-  return res.json({ message: "Order marked as ready. Assigning nearest rider...", order });
+  return res.json({ message, order });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -809,21 +842,34 @@ export const getMyOrders = async (req: Request, res: Response) => {
   const orders = await Order.find({ customer: userId })
     .sort({ createdAt: -1 })
     .populate("paymentTransaction")
-    .populate("store", "name slug logo address")
+    .populate("store", "name slug logo address phone")
     .populate("assignedDriver", "name phone avatar")
     .lean();
 
   const now = new Date();
   const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
 
-  const active = orders.filter((o) => ["pending", "preparing", "ready", "picked_up", "out_for_delivery"].includes(o.status)).map(o => {
+  const active = orders.filter((o) => {
+    if (["pending", "preparing", "ready", "picked_up", "out_for_delivery"].includes(o.status)) return true;
+    if (o.status === "delivered") {
+      const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date((o as any).updatedAt).getTime();
+      return (now.getTime() - deliveredTime) <= 1 * 60 * 1000;
+    }
+    return false;
+  }).map(o => {
     // Hide driver details until driver accepts
     if (o.deliveryStatus === "driver_notified" || o.deliveryStatus === "pending") {
       return { ...o, assignedDriver: null };
     }
     return o;
   });
-  const past = orders.filter((o) => o.status === "delivered");
+  const past = orders.filter((o) => {
+    if (o.status === "delivered") {
+      const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date((o as any).updatedAt).getTime();
+      return (now.getTime() - deliveredTime) > 1 * 60 * 1000;
+    }
+    return false;
+  });
   const cancelled = orders.filter((o) => ["cancelled", "failed"].includes(o.status));
 
   return res.json({
@@ -856,12 +902,22 @@ export const getOrderTracking = async (req: Request, res: Response) => {
   if (["picked_up", "out_for_delivery"].includes(order.deliveryStatus) || order.status === "picked_up") currentStep = 2;
   if (order.deliveryStatus === "delivered" || order.status === "delivered") currentStep = 3;
 
-  const timeline = [
-    { status: "Order Placed", completed: true, time: order.createdAt },
-    { status: "Preparing", completed: currentStep >= 1, time: currentStep >= 1 ? (order as any).updatedAt : null },
-    { status: "Picked Up", completed: currentStep >= 2, time: currentStep >= 2 ? (order as any).updatedAt : null },
-    { status: "Delivered", completed: currentStep >= 3, time: currentStep >= 3 ? (order as any).updatedAt : null },
-  ];
+  let timeline = [];
+  if (order.orderType === "pickup") {
+    timeline = [
+      { status: "Order Placed", completed: true, time: order.createdAt },
+      { status: "Preparing", completed: currentStep >= 1, time: currentStep >= 1 ? (order as any).updatedAt : null },
+      { status: "Ready for Pickup", completed: order.status === "ready" || currentStep >= 3, time: order.status === "ready" ? (order as any).updatedAt : null },
+      { status: "Collected", completed: currentStep >= 3, time: currentStep >= 3 ? (order as any).updatedAt : null },
+    ];
+  } else {
+    timeline = [
+      { status: "Order Placed", completed: true, time: order.createdAt },
+      { status: "Preparing", completed: currentStep >= 1, time: currentStep >= 1 ? (order as any).updatedAt : null },
+      { status: "Picked Up", completed: currentStep >= 2, time: currentStep >= 2 ? (order as any).updatedAt : null },
+      { status: "Delivered", completed: currentStep >= 3, time: currentStep >= 3 ? (order as any).updatedAt : null },
+    ];
+  }
 
   // 2. Cancellation window (5 minutes)
   const now = new Date();
@@ -891,6 +947,8 @@ export const getOrderTracking = async (req: Request, res: Response) => {
       store: order.store,
       assignedDriver: showRider ? order.assignedDriver : null,
       deliveryOTP: order.deliveryOTP,
+      orderType: order.orderType,
+      pickupTime: order.pickupTime,
     },
     currentStep,
     timeline,
@@ -1220,4 +1278,43 @@ export const restaurantVerifyPickup = async (req: Request, res: Response) => {
   });
 
   return res.json({ success: true, message: "OTP verified. Order handed over.", order });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT: Complete Self-Pickup Order
+// ─────────────────────────────────────────────────────────────────────────────
+export const restaurantCompletePickup = async (req: Request, res: Response) => {
+  const orderId = req.params.orderId as string;
+
+  const order = await Order.findById(orderId);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  if (order.orderType !== "pickup") {
+    return res.status(400).json({ message: "Only self-pickup orders can be completed by restaurant" });
+  }
+
+  if (order.status !== "ready") {
+    return res.status(400).json({ message: "Order must be ready before it can be completed" });
+  }
+
+  order.deliveryStatus = "delivered";
+  order.status = "delivered";
+  order.deliveredAt = new Date();
+  await order.save();
+
+  // Credit the restaurant's wallet
+  const restaurant = await Restaurant.findById(order.store);
+  if (restaurant) {
+      restaurant.walletBalance = (restaurant.walletBalance || 0) + order.payableAmount;
+      await restaurant.save();
+  }
+
+  emitOrderStatusUpdate(orderId, {
+    status: order.status,
+    deliveryStatus: order.deliveryStatus,
+    message: "Order has been collected by the customer",
+    updatedAt: (order as any).updatedAt,
+  });
+
+  return res.json({ success: true, message: "Order marked as collected", order });
 };

@@ -30,6 +30,7 @@ import {
   sendPickupOtp,
   sendDeliveryOtp,
   calculateDeliveryFee,
+  restaurantCompletePickup,
 } from "../controllers/orders.controller.js";
 
 const router = Router();
@@ -60,6 +61,7 @@ router.patch("/restaurant/ready/:orderId", jwtAuth, requireRole("admin"), asyncH
 router.post("/restaurant/verify-pickup/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantVerifyPickup));
 router.patch("/restaurant/cancel/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantCancelOrder));
 router.post("/restaurant/send-pickup-otp/:orderId", jwtAuth, requireRole("admin"), asyncHandler(sendPickupOtp));
+router.post("/restaurant/complete-pickup/:orderId", jwtAuth, requireRole("admin"), asyncHandler(restaurantCompletePickup));
 
 // ─── Driver ───────────────────────────────────────────────────────────────────
 router.get("/driver/my-orders", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(getDriverOrders));
