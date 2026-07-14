@@ -23,7 +23,9 @@ import {
     vendorAddMenuItem,
     vendorToggleMenuItem,
     adminApproveMenuItem,
-    getPendingMenuItems
+    getPendingMenuItems,
+    vendorRequestDeleteMenuItem,
+    getPastMenuApprovals
 } from "../controllers/restaurant.controller.js";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
@@ -173,15 +175,8 @@ router.patch(
     asyncHandler(vendorToggleMenuItem)
 );
 
-// PATCH /api/restaurants/admin/menu/approve/:restaurantId/:itemId
-router.patch(
-    "/admin/menu/approve/:restaurantId/:itemId",
-    jwtAuth,
-    requireRole("admin"),
-    asyncHandler(adminApproveMenuItem)
-);
-
-
+// ADMIN: PATCH /api/restaurants/admin/menu/approve/:restaurantId/:itemId
+router.patch("/admin/menu/approve/:restaurantId/:itemId", jwtAuth, requireRole("admin"), asyncHandler(adminApproveMenuItem));
 
 // GET /api/restaurants/admin/menu/pending
 router.get(
@@ -190,5 +185,16 @@ router.get(
     requireRole("admin"),
     asyncHandler(getPendingMenuItems)
 );
+
+// GET /api/restaurants/admin/menu/history
+router.get(
+    "/admin/menu/history",
+    jwtAuth,
+    requireRole("admin"),
+    asyncHandler(getPastMenuApprovals)
+);
+
+// DELETE /api/restaurants/:restaurantId/menu/:itemId/request-delete
+router.delete("/:restaurantId/menu/:itemId/request-delete", asyncHandler(vendorRequestDeleteMenuItem));
 
 export default router;

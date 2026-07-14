@@ -6,6 +6,7 @@ import {
     getMyRefunds,
     getAllRefunds,
     getRefundStats,
+    processRefund,
 } from "../controllers/refund.controller.js";
 
 const router = Router();
@@ -16,5 +17,6 @@ router.get("/my", jwtAuth, asyncHandler(getMyRefunds));
 // Admin: view all refunds + stats
 router.get("/all", jwtAuth, requireRole("admin"), asyncHandler(getAllRefunds));
 router.get("/stats", jwtAuth, requireRole("admin"), asyncHandler(getRefundStats));
+router.patch("/:id/process", jwtAuth, requireRole("admin"), asyncHandler(processRefund));
 
 export default router;

@@ -11,7 +11,8 @@ export interface IMenuItem {
     image?: string;
     foodType: FoodType;
     isAvailable: boolean;
-    approvalStatus?: "pending" | "approved" | "rejected";
+    approvalStatus?: "pending" | "approved" | "rejected" | "delete_pending" | "deleted";
+    deleteReason?: string;
 }
 
 export interface IRestaurant extends Document {
@@ -54,7 +55,8 @@ const MenuItemSchema = new Schema<IMenuItem>(
         image: { type: String },
         foodType: { type: String, enum: ["veg", "non-veg", "vegan"], required: true },
         isAvailable: { type: Boolean, default: true },
-        approvalStatus: { type: String, enum: ["pending", "approved", "rejected"], default: "approved" },
+        approvalStatus: { type: String, enum: ["pending", "approved", "rejected", "delete_pending", "deleted"], default: "approved" },
+        deleteReason: { type: String },
     },
     { _id: true }
 );

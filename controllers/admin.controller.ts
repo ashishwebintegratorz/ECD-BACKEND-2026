@@ -9,7 +9,21 @@ import { BadRequestException, NotFoundException } from "../utils/appError.js";
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN: Full Dashboard Stats
 // ─────────────────────────────────────────────────────────────────────────────
-export const getDashboard = async (_req: Request, res: Response) => {
+export const getDashboard = async (req: Request, res: Response) => {
+    const filter = (req.query.filter as string) || "all";
+    
+    const dateQuery: any = {};
+    const now = new Date();
+    if (filter === "today") {
+        dateQuery.createdAt = { $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) };
+    } else if (filter === "7_days") {
+        dateQuery.createdAt = { $gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) };
+    } else if (filter === "1_month") {
+        dateQuery.createdAt = { $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) };
+    } else if (filter === "1_year") {
+        dateQuery.createdAt = { $gte: new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000) };
+    }
+
     const [
         totalUsers,
         totalDrivers,
@@ -22,29 +36,30 @@ export const getDashboard = async (_req: Request, res: Response) => {
         payoutsAgg,
         recentOrders,
     ] = await Promise.all([
-        User.countDocuments({ role: "customer" }),
-        User.countDocuments({ role: "driver" }),
-        Restaurant.countDocuments({ isActive: true }),
-        Order.countDocuments(),
-        Order.countDocuments({ status: { $in: ["preparing", "ready"] } }),
+        User.countDocuments({ role: "customer", ...dateQuery }),
+        User.countDocuments({ role: "driver", ...dateQuery }),
+        Restaurant.countDocuments({ isActive: true, ...dateQuery }),
+        Order.countDocuments(dateQuery),
+        Order.countDocuments({ status: { $in: ["preparing", "ready"] }, ...dateQuery }),
         PaymentTransaction.aggregate([
-            { $match: { status: "success" } },
+            { $match: { status: "success", ...dateQuery } },
             { $group: { _id: null, total: { $sum: "$amount" } } },
         ]),
-        Refund.countDocuments({ status: "pending" }),
+        Refund.countDocuments({ status: "pending", ...dateQuery }),
         Order.aggregate([
+            { $match: dateQuery },
             { $group: { _id: "$status", count: { $sum: 1 }, revenue: { $sum: "$payableAmount" } } },
         ]),
         Order.aggregate([
-            { $match: { status: "delivered" } },
+            { $match: { status: "delivered", ...dateQuery } },
             { $group: { _id: null, totalRestaurantPayouts: { $sum: "$restaurantEarnings" }, totalRiderPayouts: { $sum: "$driverEarnings" }, totalDeliveryCharge: { $sum: "$deliveryCharge" }, riderAdminCommission: { $sum: "$riderAdminCommission" } } }
         ]),
-        Order.find({ status: "delivered" })
+        Order.find({ status: "delivered", ...dateQuery })
             .sort({ deliveredAt: -1, createdAt: -1 })
-            .limit(10)
+            .limit(50)
             .populate("store", "name storeType")
             .populate("assignedDriver", "name phone riderId")
-            .select("orderNumber totalAmount payableAmount driverEarnings restaurantEarnings createdAt deliveredAt")
+            .select("orderNumber totalAmount payableAmount driverEarnings restaurantEarnings deliveryCharge createdAt deliveredAt")
             .lean()
     ]);
 
@@ -392,17 +407,28 @@ export const getRiderOrderHistory = async (req: Request, res: Response) => {
         .lean();
 
     // Formatting for frontend convenience
-    const formattedOrders = orders.map(o => ({
-        _id: o._id,
-        orderNumber: o.orderNumber,
-        createdAt: o.createdAt,
-        pickupLocation: o.store ? `${(o.store as any).name}, ${(o.store as any).address}` : "Unknown Store",
-        dropLocation: typeof o.address === 'object' && o.address !== null 
-            ? o.address.formattedAddress || JSON.stringify(o.address) 
-            : o.address,
-        driverEarnings: o.driverEarnings || 0,
-        payableAmount: o.payableAmount
-    }));
+    const formattedOrders = orders.map(o => {
+        let parsedDrop = o.address;
+        if (typeof parsedDrop === 'string' && parsedDrop.startsWith('{')) {
+            try { parsedDrop = JSON.parse(parsedDrop); } catch (e) {}
+        }
+        let dropLoc = "N/A";
+        if (typeof parsedDrop === 'object' && parsedDrop !== null) {
+            dropLoc = parsedDrop.fullAddress || parsedDrop.formattedAddress || parsedDrop.address || JSON.stringify(parsedDrop);
+        } else {
+            dropLoc = String(parsedDrop || "N/A");
+        }
+
+        return {
+            _id: o._id,
+            orderNumber: o.orderNumber,
+            createdAt: o.createdAt,
+            pickupLocation: o.store ? `${(o.store as any).name}, ${(o.store as any).address}` : "Unknown Store",
+            dropLocation: dropLoc,
+            driverEarnings: o.driverEarnings || 0,
+            payableAmount: o.payableAmount
+        };
+    });
 
     return res.json({ orders: formattedOrders });
 };

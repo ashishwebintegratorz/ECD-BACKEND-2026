@@ -51,3 +51,25 @@ export const getRefundStats = async (_req: Request, res: Response) => {
 
     return res.json({ stats });
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: Process (Complete) Refund
+// ─────────────────────────────────────────────────────────────────────────────
+export const processRefund = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    
+    const refund = await Refund.findById(id);
+    if (!refund) {
+        return res.status(404).json({ message: "Refund not found" });
+    }
+
+    if (refund.status === "completed") {
+        return res.status(400).json({ message: "Refund is already completed" });
+    }
+
+    refund.status = "completed";
+    refund.processedAt = new Date();
+    await refund.save();
+
+    return res.json({ message: "Refund processed successfully", refund });
+};

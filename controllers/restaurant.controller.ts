@@ -876,7 +876,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
 
 export const vendorAddMenuItem = async (req: Request, res: Response) => {
     try {
-        const { restaurantId } = req.params;
+        const restaurantId = req.params.restaurantId as string;
         const { name, description, b2bPrice, image, foodType } = req.body;
 
         const restaurant = await Restaurant.findOne({
@@ -922,7 +922,8 @@ export const vendorAddMenuItem = async (req: Request, res: Response) => {
 
 export const vendorToggleMenuItem = async (req: Request, res: Response) => {
     try {
-        const { restaurantId, itemId } = req.params;
+        const restaurantId = req.params.restaurantId as string;
+        const itemId = req.params.itemId as string;
         const { isAvailable } = req.body;
 
         const restaurant = await Restaurant.findOne({
@@ -955,7 +956,8 @@ export const vendorToggleMenuItem = async (req: Request, res: Response) => {
 
 export const adminApproveMenuItem = async (req: Request, res: Response) => {
     try {
-        const { restaurantId, itemId } = req.params;
+        const restaurantId = req.params.restaurantId as string;
+        const itemId = req.params.itemId as string;
         const { approvalStatus, price } = req.body;
 
         const restaurant = await Restaurant.findOne({
@@ -974,9 +976,14 @@ export const adminApproveMenuItem = async (req: Request, res: Response) => {
         }
 
         if (approvalStatus) {
-            menuItem.approvalStatus = approvalStatus;
-            if (approvalStatus === "approved") {
-                menuItem.isAvailable = true;
+            if (approvalStatus === "deleted") {
+                menuItem.approvalStatus = "deleted";
+                menuItem.isAvailable = false;
+            } else {
+                menuItem.approvalStatus = approvalStatus;
+                if (approvalStatus === "approved") {
+                    menuItem.isAvailable = true;
+                }
             }
         }
         if (price !== undefined) {
@@ -998,12 +1005,12 @@ export const adminApproveMenuItem = async (req: Request, res: Response) => {
 
 export const getPendingMenuItems = async (req: Request, res: Response) => {
     try {
-        const restaurants = await Restaurant.find({ "menu.approvalStatus": "pending" });
+        const restaurants = await Restaurant.find({ "menu.approvalStatus": { $in: ["pending", "delete_pending"] } });
         const pendingItems: any[] = [];
         
         restaurants.forEach(rest => {
             rest.menu.forEach(item => {
-                if ((item as any).approvalStatus === "pending") {
+                if (["pending", "delete_pending"].includes((item as any).approvalStatus)) {
                     pendingItems.push({
                         restaurantId: rest.restaurantId,
                         restaurantName: rest.name,
@@ -1013,13 +1020,84 @@ export const getPendingMenuItems = async (req: Request, res: Response) => {
                         b2bPrice: item.b2bPrice,
                         image: item.image,
                         foodType: item.foodType,
-                        approvalStatus: (item as any).approvalStatus
+                        approvalStatus: (item as any).approvalStatus,
+                        deleteReason: (item as any).deleteReason
                     });
                 }
             });
         });
         
         return res.json({ success: true, pendingItems });
+    } catch (error: any) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const vendorRequestDeleteMenuItem = async (req: Request, res: Response) => {
+    try {
+        const restaurantId = req.params.restaurantId as string;
+        const itemId = req.params.itemId as string;
+        const { reason } = req.body;
+
+        const restaurant = await Restaurant.findOne({
+            $or: [
+                { restaurantId: restaurantId },
+                ...(Types.ObjectId.isValid(restaurantId) ? [{ _id: restaurantId }] : [])
+            ]
+        });
+        if (!restaurant) {
+            return res.status(404).json({ success: false, message: "Restaurant not found" });
+        }
+
+        const menuItem = restaurant.menu.find(m => (m as any)._id.toString() === itemId) as any;
+        if (!menuItem) {
+            return res.status(404).json({ success: false, message: "Menu item not found" });
+        }
+
+        menuItem.approvalStatus = "delete_pending";
+        menuItem.isAvailable = false;
+        menuItem.deleteReason = reason || "No reason provided";
+        
+        await restaurant.save();
+
+        return res.json({
+            success: true,
+            message: "Deletion request submitted",
+            menu: restaurant.menu
+        });
+    } catch (error: any) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const getPastMenuApprovals = async (req: Request, res: Response) => {
+    try {
+        const restaurants = await Restaurant.find({ 
+            "menu.approvalStatus": { $in: ["approved", "rejected", "deleted"] }
+        });
+        const pastItems: any[] = [];
+        
+        restaurants.forEach(rest => {
+            rest.menu.forEach(item => {
+                if (["approved", "rejected", "deleted"].includes((item as any).approvalStatus)) {
+                    pastItems.push({
+                        restaurantId: rest.restaurantId,
+                        restaurantName: rest.name,
+                        _id: (item as any)._id,
+                        name: item.name,
+                        description: item.description,
+                        b2bPrice: item.b2bPrice,
+                        price: item.price,
+                        image: item.image,
+                        foodType: item.foodType,
+                        approvalStatus: (item as any).approvalStatus,
+                        deleteReason: (item as any).deleteReason
+                    });
+                }
+            });
+        });
+        
+        return res.json({ success: true, pastItems });
     } catch (error: any) {
         return res.status(500).json({ success: false, message: error.message });
     }
