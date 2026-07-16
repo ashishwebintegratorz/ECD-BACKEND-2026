@@ -6,12 +6,12 @@ dotenv.config();
 const test = async () => {
     try {
         await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ecdkart');
-        const count = await mongoose.connection.db.collection('restaurants').countDocuments();
-        const activeCount = await mongoose.connection.db.collection('restaurants').countDocuments({ isActive: true });
+        const count = await mongoose.connection.db!.collection('restaurants').countDocuments();
+        const activeCount = await mongoose.connection.db!.collection('restaurants').countDocuments({ isActive: true });
         console.log(`Total restaurants: ${count}`);
         console.log(`Active restaurants: ${activeCount}`);
         
-        const oneRest = await mongoose.connection.db.collection('restaurants').findOne();
+        const oneRest = await mongoose.connection.db!.collection('restaurants').findOne();
         if (oneRest) {
             console.log("Sample restaurant:");
             console.log(`name: ${oneRest.name}`);
