@@ -82,6 +82,7 @@ export const getOrderHistory = asyncHandler(async (req: Request, res: Response) 
     const orders = await Order.find(filter)
         .populate("store")
         .populate("customer", "name phone avatar")
+        .populate("paymentTransaction")
         .sort({ updatedAt: -1 });
 
     const formattedOrders = orders.map(order => {
@@ -110,7 +111,9 @@ export const getOrderHistory = asyncHandler(async (req: Request, res: Response) 
                 price: item.price
             })),
             deliveredAt: order.deliveredAt,
-            updatedAt: order.updatedAt
+            updatedAt: order.updatedAt,
+            paymentTransaction: order.paymentTransaction,
+            driverEarnings: order.driverEarnings
         };
     });
 

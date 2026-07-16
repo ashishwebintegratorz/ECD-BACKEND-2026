@@ -244,12 +244,15 @@ export const createOrder = async (req: Request, res: Response) => {
 
   // COD flow
   if (paymentMethod === "cod") {
-    await PaymentTransaction.create({
+    const txn = await PaymentTransaction.create({
       order: order._id,
       provider: "cod",
       amount: payableAmount,
       status: "success",
     });
+    order.paymentTransaction = txn._id;
+    await order.save();
+    
     await confirmOrderLogic(order._id.toString());
 
     // Auto-generate delivery OTP for order
@@ -274,13 +277,16 @@ export const createOrder = async (req: Request, res: Response) => {
 
   // If frontend already processed mock payment and sent a paymentId
   if (req.body.paymentId) {
-    await PaymentTransaction.create({
+    const txn = await PaymentTransaction.create({
       order: order._id,
       provider: paymentMethod || "mock",
       providerPaymentId: req.body.paymentId,
       amount: payableAmount,
       status: "success",
     });
+    order.paymentTransaction = txn._id;
+    await order.save();
+    
     await confirmOrderLogic(order._id.toString());
 
     // Auto-generate delivery OTP for order
@@ -313,13 +319,15 @@ export const createOrder = async (req: Request, res: Response) => {
 
   console.log("RAZORPAY ORDER CREATED (Order Flow):", JSON.stringify(razorpayOrder, null, 2));
 
-  await PaymentTransaction.create({
+  const txn = await PaymentTransaction.create({
     order: order._id,
     provider: "razorpay",
     providerPaymentId: razorpayOrder.id,
     amount: payableAmount,
     status: "initiated",
   });
+  order.paymentTransaction = txn._id;
+  await order.save();
 
   return res.json({
     orderId: order._id,
