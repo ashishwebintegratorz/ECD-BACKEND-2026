@@ -1,8 +1,10 @@
 import { Server } from "socket.io";
 import UserModel from "../models/User.model.js";
+import RestaurantModel from "../models/Restaurant.model.js";
 
 let io: Server | null = null;
 const driverSockets = new Map<string, string>(); // socket.id -> driverId
+const restaurantSockets = new Map<string, string>(); // socket.id -> restaurantId
 
 export function setIo(instance: Server) {
   io = instance;
@@ -27,6 +29,7 @@ export function initOrderSocket(instance: Server) {
     socket.on("joinRestaurant", (restaurantId: string) => {
       if (!restaurantId) return;
       socket.join(`restaurant_${restaurantId}`);
+      restaurantSockets.set(socket.id, restaurantId);
     });
 
     // Driver joins their room to receive assignment notifications
@@ -52,6 +55,17 @@ export function initOrderSocket(instance: Server) {
           console.log(`[Socket] Driver ${driverId} marked offline due to disconnect.`);
         } catch (err) {
           console.error("Error setting driver offline on disconnect:", err);
+        }
+      }
+
+      const restaurantId = restaurantSockets.get(socket.id);
+      if (restaurantId) {
+        try {
+          restaurantSockets.delete(socket.id);
+          await RestaurantModel.findByIdAndUpdate(restaurantId, { isOnline: false });
+          console.log(`[Socket] Restaurant ${restaurantId} marked offline due to disconnect.`);
+        } catch (err) {
+          console.error("Error setting restaurant offline on disconnect:", err);
         }
       }
     });
