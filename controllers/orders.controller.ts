@@ -564,20 +564,25 @@ export const cancelOrder = async (req: Request, res: Response) => {
 
   const isPriority = diffInMinutes <= 5;
 
-  // Create refund record
-  await createRefundRecord(
-    orderId,
-    order.orderNumber,
-    userId,
-    order.payableAmount,
-    cancelReason,
-    "customer",
-    isPriority
-  );
+  const txn = await PaymentTransaction.findOne({ order: order._id }).sort({ createdAt: -1 });
+  const isOnlinePayment = txn && txn.provider !== "cod";
 
-  // Push: notify customer of cancellation + refund
+  if (isOnlinePayment) {
+    // Create refund record
+    await createRefundRecord(
+      orderId,
+      order.orderNumber,
+      userId,
+      order.payableAmount,
+      cancelReason,
+      "customer",
+      isPriority
+    );
+    notifyRefundInitiated(userId, order.payableAmount, order.orderNumber).catch(() => { });
+  }
+
+  // Push: notify customer of cancellation
   notifyOrderCancelled(userId, order.orderNumber).catch(() => { });
-  notifyRefundInitiated(userId, order.payableAmount, order.orderNumber).catch(() => { });
   emitOrderStatusUpdate(orderId, {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
@@ -859,9 +864,9 @@ export const getMyOrders = async (req: Request, res: Response) => {
 
   const active = orders.filter((o) => {
     if (["pending", "preparing", "ready", "picked_up", "out_for_delivery"].includes(o.status)) return true;
-    if (o.status === "delivered") {
-      const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date((o as any).updatedAt).getTime();
-      return (now.getTime() - deliveredTime) <= 1 * 60 * 1000;
+    if (o.status === "delivered" || o.status === "cancelled" || o.status === "failed") {
+      const actionTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date((o as any).updatedAt).getTime();
+      return (now.getTime() - actionTime) <= 30 * 1000; // 30 seconds
     }
     return false;
   }).map(o => {
@@ -874,11 +879,17 @@ export const getMyOrders = async (req: Request, res: Response) => {
   const past = orders.filter((o) => {
     if (o.status === "delivered") {
       const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date((o as any).updatedAt).getTime();
-      return (now.getTime() - deliveredTime) > 1 * 60 * 1000;
+      return (now.getTime() - deliveredTime) > 30 * 1000;
     }
     return false;
   });
-  const cancelled = orders.filter((o) => ["cancelled", "failed"].includes(o.status));
+  const cancelled = orders.filter((o) => {
+    if (["cancelled", "failed"].includes(o.status)) {
+      const actionTime = new Date((o as any).updatedAt).getTime();
+      return (now.getTime() - actionTime) > 30 * 1000;
+    }
+    return false;
+  });
 
   return res.json({
     success: true,

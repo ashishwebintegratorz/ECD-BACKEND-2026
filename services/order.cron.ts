@@ -36,18 +36,23 @@ const autoCancelOrders = async () => {
 
             await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
             
-            await createRefundRecord(
-                order._id.toString(),
-                order.orderNumber,
-                order.customer.toString(),
-                order.payableAmount,
-                reason,
-                "admin" as any,
-                true // Priority refund
-            );
+            const txn = await PaymentTransaction.findOne({ order: order._id }).sort({ createdAt: -1 });
+            const isOnlinePayment = txn && txn.provider !== "cod";
+
+            if (isOnlinePayment) {
+                await createRefundRecord(
+                    order._id.toString(),
+                    order.orderNumber,
+                    order.customer.toString(),
+                    order.payableAmount,
+                    reason,
+                    "admin" as any,
+                    true // Priority refund
+                );
+                notifyRefundInitiated(order.customer.toString(), order.payableAmount, order.orderNumber).catch(() => {});
+            }
 
             notifyOrderCancelled(order.customer.toString(), order.orderNumber, reason).catch(() => {});
-            notifyRefundInitiated(order.customer.toString(), order.payableAmount, order.orderNumber).catch(() => {});
             emitOrderStatusUpdate(order._id.toString(), {
                 status: order.status,
                 deliveryStatus: order.deliveryStatus,
@@ -81,18 +86,23 @@ const autoCancelOrders = async () => {
 
             await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
             
-            await createRefundRecord(
-                order._id.toString(),
-                order.orderNumber,
-                order.customer.toString(),
-                order.payableAmount,
-                reason,
-                "admin" as any,
-                true
-            );
+            const txn = await PaymentTransaction.findOne({ order: order._id }).sort({ createdAt: -1 });
+            const isOnlinePayment = txn && txn.provider !== "cod";
+
+            if (isOnlinePayment) {
+                await createRefundRecord(
+                    order._id.toString(),
+                    order.orderNumber,
+                    order.customer.toString(),
+                    order.payableAmount,
+                    reason,
+                    "admin" as any,
+                    true
+                );
+                notifyRefundInitiated(order.customer.toString(), order.payableAmount, order.orderNumber).catch(() => {});
+            }
 
             notifyOrderCancelled(order.customer.toString(), order.orderNumber, reason).catch(() => {});
-            notifyRefundInitiated(order.customer.toString(), order.payableAmount, order.orderNumber).catch(() => {});
             emitOrderStatusUpdate(order._id.toString(), {
                 status: order.status,
                 deliveryStatus: order.deliveryStatus,
