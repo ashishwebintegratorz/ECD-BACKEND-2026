@@ -752,12 +752,23 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Invalid delivery OTP. Please ask the customer for the correct 4-digit code." });
     }
 
+    // Check if order is COD
+    const txn = await PaymentTransaction.findOne({ order: orderId }).sort({ createdAt: -1 });
+    const isCod = txn && txn.provider === "cod";
+
     // Credit driver's wallet with driverEarnings or deliveryCharge
     const finalEarnings = order.driverEarnings || order.deliveryCharge || 0;
-    if (finalEarnings > 0) {
+    
+    if (finalEarnings > 0 || isCod) {
       const driver = await User.findById(driverId);
       if (driver) {
-        driver.walletBalance = (driver.walletBalance || 0) + finalEarnings;
+        if (finalEarnings > 0) {
+          driver.walletBalance = (driver.walletBalance || 0) + finalEarnings;
+        }
+        if (isCod) {
+          const payable = Number(order.payableAmount) || 0;
+          driver.codBalance = (driver.codBalance || 0) + payable;
+        }
         await driver.save();
       }
     }

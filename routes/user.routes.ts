@@ -10,6 +10,7 @@ router.get("/me", jwtAuth, (req, res) => {
     return res.json({
         user: {
             id: user._id.toString(),
+            riderId: user.riderId,
             phone: user.phone,
             name: user.name,
             role: user.role,

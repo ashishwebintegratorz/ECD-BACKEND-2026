@@ -23,6 +23,11 @@ import {
     getWalletSummary, 
     requestWithdrawal 
 } from "../controllers/driverWallet.controller.js";
+import {
+    getCodBalance,
+    initiateCodPayment,
+    verifyCodPayment
+} from "../controllers/driverCod.controller.js";
 import { upload } from "../middlewares/multer.js";
 import { checkOnboarding } from "../middlewares/checkOnboarding.middleware.js";
 
@@ -57,5 +62,10 @@ router.post("/orders/complete", jwtAuth, requireRole("driver"), checkOnboarding,
 // Wallet & Withdrawals
 router.get("/wallet", jwtAuth, requireRole("driver"), getWalletSummary);
 router.post("/withdraw", jwtAuth, requireRole("driver"), checkOnboarding, requestWithdrawal);
+
+// COD Settlements
+router.get("/cod-balance", jwtAuth, requireRole("driver"), getCodBalance);
+router.post("/cod-payment/initiate", jwtAuth, requireRole("driver"), checkOnboarding, initiateCodPayment);
+router.post("/cod-payment/verify", jwtAuth, requireRole("driver"), checkOnboarding, verifyCodPayment);
 
 export default router;

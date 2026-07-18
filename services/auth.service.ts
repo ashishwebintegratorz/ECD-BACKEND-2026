@@ -57,6 +57,7 @@ export function createAuthTokens(user: IUser) {
 
   const safeUser = {
     id: user._id.toString(),
+    riderId: user.riderId,
     phone: user.phone,
     name: user.name,
     role: user.role,
@@ -66,8 +67,11 @@ export function createAuthTokens(user: IUser) {
     upi: user.upi,
     isOnline: user.isOnline,
     isReturning: user.isReturning,
-    riderId: user.riderId,
   };
 
-  return { accessToken, refreshToken, user: safeUser };
+  return {
+    accessToken,
+    refreshToken,
+    user: safeUser,
+  };
 }

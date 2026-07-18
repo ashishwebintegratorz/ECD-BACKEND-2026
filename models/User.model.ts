@@ -21,6 +21,7 @@ export interface IUser extends Document {
   riderId?: string;     // unique identifier for driver (e.g. DRV_001)
   totalWorkSeconds?: number;
   walletBalance?: number;
+  codBalance?: number;
   dailyOnlineSeconds?: number;
   lastShiftReset?: Date;
   status: "pending" | "active" | "suspended";
@@ -54,6 +55,7 @@ const UserSchema = new Schema<IUser>(
     riderId: { type: String, unique: true, sparse: true },
     totalWorkSeconds: { type: Number, default: 0 },
     walletBalance: { type: Number, default: 0 },
+    codBalance: { type: Number, default: 0 },
     dailyOnlineSeconds: { type: Number, default: 0 },
     lastShiftReset: { type: Date, default: Date.now },
     status: { type: String, enum: ["pending", "active", "suspended"], default: "active" },
