@@ -15,6 +15,10 @@ import {
     getRestaurantPayouts,
     processRestaurantPayout,
     getRiderOrdersSummary,
+    getRiderCodSummary,
+    settleRiderCod,
+    deductRiderCod,
+    getRiderCodHistory,
     getRiderOrderHistory,
     getSuspendedAccounts,
     deleteRestaurant,
@@ -50,6 +54,10 @@ router.get("/customers/:id/order-history", asyncHandler(getCustomerOrderHistory)
 router.get("/withdrawals", asyncHandler(getAllWithdrawalRequests));
 router.patch("/withdrawals/process", asyncHandler(processWithdrawal));
 router.get("/riders/orders/summary", asyncHandler(getRiderOrdersSummary));
+router.get("/riders/cod-summary", asyncHandler(getRiderCodSummary));
+router.post("/riders/cod/settle", asyncHandler(settleRiderCod));
+router.post("/riders/cod/deduct", asyncHandler(deductRiderCod));
+router.get("/riders/:id/cod-history", asyncHandler(getRiderCodHistory));
 router.get("/riders/:id/order-history", asyncHandler(getRiderOrderHistory));
 
 // ─── Restaurant Payouts & Management ──────────────────────────────────────────────────────

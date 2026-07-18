@@ -4,6 +4,7 @@ import Order from "../models/Order.model.js";
 import Restaurant from "../models/Restaurant.model.js";
 import PaymentTransaction from "../models/PaymentTransaction.model.js";
 import Refund from "../models/Refund.model.js";
+import CodSettlement from "../models/CodSettlement.model.js";
 import { BadRequestException, NotFoundException } from "../utils/appError.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -330,6 +331,123 @@ export const processRestaurantPayout = async (req: Request, res: Response) => {
         message: `Payout of ₹${deductAmount} processed successfully`,
         restaurant
     });
+};
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════════
+// ADMIN: Get Rider COD Summary
+// ════════════════════════════════════════════════════════════════════════════════════════════════════
+export const getRiderCodSummary = async (_req: Request, res: Response) => {
+    // Only fetch drivers that have a COD balance > 0
+    const drivers = await User.find({ role: "driver", codBalance: { $gt: 0 } })
+        .select("name phone riderId codBalance walletBalance")
+        .lean();
+
+    const codSummary = await Promise.all(drivers.map(async (driver) => {
+        const codBalance = driver.codBalance || 0;
+        const walletBalance = driver.walletBalance || 0;
+        const amountToPayAdmin = Math.max(0, codBalance - walletBalance);
+        
+        // Find the last full settlement to know which orders are unsettled
+        const lastSettlement = await CodSettlement.findOne({ driver: driver._id, type: "full" }).sort({ settledAt: -1 });
+        
+        const query: any = {
+            assignedDriver: driver._id,
+            deliveryStatus: "delivered"
+        };
+        if (lastSettlement) {
+            query.deliveredAt = { $gt: lastSettlement.settledAt };
+        }
+
+        const recentOrders = await Order.find(query)
+            .populate("paymentTransaction")
+            .populate("store", "name")
+            .lean();
+        
+        let totalOrders = 0;
+        let restaurantPay = 0;
+        const restaurants = new Set<string>();
+
+        for (const order of recentOrders) {
+            const payment = order.paymentTransaction as any;
+            if (payment && payment.provider === "cod") {
+                totalOrders++;
+                restaurantPay += (order.restaurantEarnings || 0);
+                if (order.store && (order.store as any).name) {
+                    restaurants.add((order.store as any).name);
+                }
+            }
+        }
+
+        const restaurantNames = Array.from(restaurants).join(", ") || "N/A";
+
+        return {
+            _id: driver._id,
+            name: driver.name,
+            phone: driver.phone,
+            riderId: driver.riderId,
+            codBalance,
+            walletBalance,
+            amountToPayAdmin,
+            totalOrders,
+            restaurantPay,
+            restaurantNames
+        };
+    }));
+
+    return res.json({ riders: codSummary });
+};
+
+// ==============================================================================================================================
+// ADMIN: Settle Rider COD (Full Settlement)
+// ==============================================================================================================================
+export const settleRiderCod = async (req: Request, res: Response) => {
+    const { riderId } = req.body;
+    if (!riderId) return res.status(400).json({ message: "Rider ID is required" });
+
+    const driver = await User.findOne({ _id: riderId, role: "driver" });
+    if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+    const settledAmount = driver.codBalance || 0;
+
+    driver.codBalance = 0;
+    driver.walletBalance = 0;
+    await driver.save();
+
+    if (settledAmount > 0) {
+        await CodSettlement.create({ driver: driver._id, amount: settledAmount, type: "full" });
+    }
+
+    return res.json({ message: "COD settled successfully" });
+};
+
+// ==============================================================================================================================
+// ADMIN: Deduct Rider COD (Manual Deduction)
+// ==============================================================================================================================
+export const deductRiderCod = async (req: Request, res: Response) => {
+    const { riderId, amount } = req.body;
+    if (!riderId || !amount) return res.status(400).json({ message: "Rider ID and amount are required" });
+
+    const driver = await User.findOne({ _id: riderId, role: "driver" });
+    if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+    const deduction = Number(amount);
+    if (isNaN(deduction) || deduction <= 0) return res.status(400).json({ message: "Invalid amount" });
+
+    driver.codBalance = Math.max(0, (driver.codBalance || 0) - deduction);
+    await driver.save();
+
+    await CodSettlement.create({ driver: driver._id, amount: deduction, type: "manual" });
+
+    return res.json({ message: `Deducted ₹${deduction} from COD balance` });
+};
+
+// ==============================================================================================================================
+// ADMIN: Get Rider COD Settlement History
+// ==============================================================================================================================
+export const getRiderCodHistory = async (req: Request, res: Response) => {
+    const { riderId } = req.params;
+    const history = await CodSettlement.find({ driver: riderId }).sort({ settledAt: -1 }).lean();
+    return res.json({ history });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
