@@ -6,18 +6,20 @@ import crypto from "crypto";
 
 export const getCodBalance = asyncHandler(async (req: Request, res: Response) => {
     const driverId = (req as any).user.id;
-    const driver = await User.findById(driverId).select("codBalance walletBalance");
+    const driver = await User.findById(driverId).select("codBalance codEarnings walletBalance");
     
     if (!driver) {
         return res.status(404).json({ message: "Driver not found" });
     }
 
     const codBalance = driver.codBalance || 0;
+    const codEarnings = driver.codEarnings || 0;
     const walletBalance = driver.walletBalance || 0;
-    const amountToPay = Math.max(0, codBalance - walletBalance);
+    const amountToPay = Math.max(0, codBalance - codEarnings);
 
     return res.json({
         codBalance,
+        codEarnings,
         walletBalance,
         amountToPay
     });
@@ -32,8 +34,8 @@ export const initiateCodPayment = asyncHandler(async (req: Request, res: Respons
     }
 
     const codBalance = driver.codBalance || 0;
-    const walletBalance = driver.walletBalance || 0;
-    const amountToPay = codBalance - walletBalance;
+    const codEarnings = driver.codEarnings || 0;
+    const amountToPay = Math.max(0, codBalance - codEarnings);
 
     if (amountToPay <= 0) {
         return res.status(400).json({ message: "No pending COD balance to pay" });
@@ -71,11 +73,11 @@ export const verifyCodPayment = asyncHandler(async (req: Request, res: Response)
         return res.status(404).json({ message: "Driver not found" });
     }
 
-    // Reset both balances as the settlement is complete
+    // Reset COD balance and earnings as the settlement is complete
     driver.codBalance = 0;
-    driver.walletBalance = 0;
+    driver.codEarnings = 0;
     
     await driver.save();
 
-    return res.json({ message: "COD settlement successful!", codBalance: 0, walletBalance: 0 });
+    return res.json({ message: "COD settlement successful!", codBalance: 0, codEarnings: 0, walletBalance: driver.walletBalance || 0 });
 });
