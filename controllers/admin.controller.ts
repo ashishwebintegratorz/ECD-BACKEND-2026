@@ -339,13 +339,14 @@ export const processRestaurantPayout = async (req: Request, res: Response) => {
 export const getRiderCodSummary = async (_req: Request, res: Response) => {
     // Only fetch drivers that have a COD balance > 0
     const drivers = await User.find({ role: "driver", codBalance: { $gt: 0 } })
-        .select("name phone riderId codBalance walletBalance")
+        .select("name phone riderId codBalance codEarnings walletBalance")
         .lean();
 
     const codSummary = await Promise.all(drivers.map(async (driver) => {
         const codBalance = driver.codBalance || 0;
+        const codEarnings = driver.codEarnings || 0;
         const walletBalance = driver.walletBalance || 0;
-        const amountToPayAdmin = Math.max(0, codBalance - walletBalance);
+        const amountToPayAdmin = Math.max(0, codBalance - codEarnings);
         
         // Find the last full settlement to know which orders are unsettled
         const lastSettlement = await CodSettlement.findOne({ driver: driver._id, type: "full" }).sort({ settledAt: -1 });
@@ -386,6 +387,7 @@ export const getRiderCodSummary = async (_req: Request, res: Response) => {
             phone: driver.phone,
             riderId: driver.riderId,
             codBalance,
+            codEarnings,
             walletBalance,
             amountToPayAdmin,
             totalOrders,
@@ -407,10 +409,10 @@ export const settleRiderCod = async (req: Request, res: Response) => {
     const driver = await User.findOne({ _id: riderId, role: "driver" });
     if (!driver) return res.status(404).json({ message: "Driver not found" });
 
-    const settledAmount = driver.codBalance || 0;
+    const settledAmount = Math.max(0, (driver.codBalance || 0) - (driver.codEarnings || 0));
 
     driver.codBalance = 0;
-    driver.walletBalance = 0;
+    driver.codEarnings = 0;
     await driver.save();
 
     if (settledAmount > 0) {

@@ -22,6 +22,7 @@ export interface IUser extends Document {
   totalWorkSeconds?: number;
   walletBalance?: number;
   codBalance?: number;
+  codEarnings?: number;
   dailyOnlineSeconds?: number;
   lastShiftReset?: Date;
   status: "pending" | "active" | "suspended";
@@ -56,6 +57,7 @@ const UserSchema = new Schema<IUser>(
     totalWorkSeconds: { type: Number, default: 0 },
     walletBalance: { type: Number, default: 0 },
     codBalance: { type: Number, default: 0 },
+    codEarnings: { type: Number, default: 0 },
     dailyOnlineSeconds: { type: Number, default: 0 },
     lastShiftReset: { type: Date, default: Date.now },
     status: { type: String, enum: ["pending", "active", "suspended"], default: "active" },

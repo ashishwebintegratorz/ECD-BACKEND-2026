@@ -762,12 +762,14 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
     if (finalEarnings > 0 || isCod) {
       const driver = await User.findById(driverId);
       if (driver) {
-        if (finalEarnings > 0) {
-          driver.walletBalance = (driver.walletBalance || 0) + finalEarnings;
-        }
         if (isCod) {
           const payable = Number(order.payableAmount) || 0;
           driver.codBalance = (driver.codBalance || 0) + payable;
+          driver.codEarnings = (driver.codEarnings || 0) + finalEarnings;
+        } else {
+          if (finalEarnings > 0) {
+            driver.walletBalance = (driver.walletBalance || 0) + finalEarnings;
+          }
         }
         await driver.save();
       }
