@@ -6,6 +6,9 @@ import {
   findOrCreateUserByPhone,
   createAuthTokens,
   setUserPin,
+  checkAccountLockout,
+  recordFailedLoginAttempt,
+  clearAccountLockout,
 } from "../services/auth.service.js";
 import {
   BadRequestException,
@@ -62,6 +65,9 @@ export const verifyOtpController = asyncHandler(
     const user = await findOrCreateUserByPhone(phone, "driver", name);
     await setUserPin(user, pin);
 
+    // Reset lockout counter on successful verification
+    await clearAccountLockout(user);
+
     const auth = createAuthTokens(user);
 
     return res.json({
@@ -78,12 +84,21 @@ export const verifyOtpController = asyncHandler(
 export const loginWithPin = asyncHandler(
   async (req: Request, res: Response) => {
     const { phone, pin } = req.body;
+    const clientIp = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
 
     const user = await UserModel.findOne({ phone, role: "driver" });
     if (!user) throw new NotFoundException("Driver not found");
 
     if (user.status === "suspended") {
       throw new UnauthorizedException("Your account has been blocked. Please contact admin.");
+    }
+
+    // 1. Check if driver account is currently locked
+    const lockout = await checkAccountLockout(user);
+    if (lockout.isLocked) {
+      throw new UnauthorizedException(
+        `Account is locked due to 5 consecutive failed login attempts. Please try again in ${lockout.remainingText}.`
+      );
     }
 
     if (!user.pinHash) {
@@ -93,7 +108,21 @@ export const loginWithPin = asyncHandler(
     }
 
     const ok = await bcrypt.compare(pin, user.pinHash);
-    if (!ok) throw new UnauthorizedException("Invalid PIN");
+    if (!ok) {
+      const failure = await recordFailedLoginAttempt(user, clientIp);
+      if (failure.isLockedNow) {
+        throw new UnauthorizedException(
+          `Account is locked due to 5 consecutive failed login attempts. Please try again in ${failure.remainingText}.`
+        );
+      }
+      const attemptsRemaining = 5 - failure.attempts;
+      throw new UnauthorizedException(
+        `Invalid PIN. ${attemptsRemaining} attempt(s) remaining before account lockout.`
+      );
+    }
+
+    // 2. Clear lockout counter on successful authentication
+    await clearAccountLockout(user);
 
     const auth = createAuthTokens(user);
 

@@ -8,19 +8,24 @@ import {
   refreshTokenSchema,
 } from "../validators/auth.validator.js";
 
+import { otpRateLimiter } from "../middlewares/otpRateLimiter.middleware.js";
+import { authLimiter } from "../middlewares/rateLimiter.middleware.js";
+
 const router = Router();
 
-router.post("/send-otp", validate(sendOtpSchema), authCtrl.sendOtp);
-router.post("/verify-otp", validate(verifyOtpSchema), authCtrl.verifyOtpController);
+router.post("/send-otp", otpRateLimiter, validate(sendOtpSchema), authCtrl.sendOtp);
+router.post("/verify-otp", authLimiter, validate(verifyOtpSchema), authCtrl.verifyOtpController);
 router.post(
   "/login-with-pin",
+  authLimiter,
   validate(loginWithPinSchema),
   authCtrl.loginWithPin
 );
 router.post(
   "/refresh-token",
+  authLimiter,
   validate(refreshTokenSchema),
   authCtrl.refreshTokenController
 );
-router.post("/refresh", authCtrl.refreshAccessToken);
+router.post("/refresh", authLimiter, authCtrl.refreshAccessToken);
 export default router;

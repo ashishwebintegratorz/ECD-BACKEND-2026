@@ -2,6 +2,8 @@ import { Router } from "express";
 import { jwtAuth } from "../middlewares/jwtAuth.middleware.js";
 import { updateProfile, deleteAccount } from "../controllers/user.controller.js";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import { updateUserProfileSchema } from "../validators/user.validator.js";
 
 const router = Router();
 
@@ -24,7 +26,7 @@ router.get("/me", jwtAuth, (req, res) => {
 });
 
 // PUT /api/v1/user/update-profile
-router.put("/update-profile", jwtAuth, asyncHandler(updateProfile));
+router.put("/update-profile", jwtAuth, validate(updateUserProfileSchema), asyncHandler(updateProfile));
 
 // DELETE /api/v1/user/delete-account
 router.delete("/delete-account", jwtAuth, asyncHandler(deleteAccount));

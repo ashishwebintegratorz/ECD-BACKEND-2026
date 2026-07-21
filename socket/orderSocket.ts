@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import UserModel from "../models/User.model.js";
 import RestaurantModel from "../models/Restaurant.model.js";
+import { verifyAccessJwt } from "../utils/jwt.js";
 
 let io: Server | null = null;
 const driverSockets = new Map<string, string>(); // socket.id -> driverId
@@ -11,8 +12,38 @@ export function setIo(instance: Server) {
 }
 
 export function initOrderSocket(instance: Server) {
+  // Socket Handshake Authentication Middleware
+  instance.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(" ")[1];
+      if (!token) {
+        // If token missing, allow connection in development with limited access or reject
+        if (process.env.NODE_ENV === "development") {
+          (socket as any).user = { role: "guest" };
+          return next();
+        }
+        return next(new Error("Authentication error: Missing token"));
+      }
+
+      const payload: any = verifyAccessJwt(token);
+      const user = await UserModel.findById(payload.sub);
+      if (!user) {
+        return next(new Error("Authentication error: User not found"));
+      }
+      (socket as any).user = user;
+      next();
+    } catch (err: any) {
+      if (process.env.NODE_ENV === "development") {
+        (socket as any).user = { role: "guest" };
+        return next();
+      }
+      return next(new Error("Authentication error: Invalid token"));
+    }
+  });
+
   instance.on("connection", (socket) => {
-    console.log("Socket connected:", socket.id);
+    const user = (socket as any).user;
+    console.log(`Socket connected: ${socket.id} (User: ${user?._id || "guest"}, Role: ${user?.role || "none"})`);
 
     socket.on("joinOrder", (orderId: string) => {
       console.log(`[Socket] Client ${socket.id} joining order room: order_${orderId}`);
@@ -39,9 +70,11 @@ export function initOrderSocket(instance: Server) {
       driverSockets.set(socket.id, driverId);
     });
 
-    // Admin room
+    // Admin room (Requires admin role check)
     socket.on("joinAdmin", () => {
-      socket.join("admins");
+      if (user?.role === "admin" || process.env.NODE_ENV === "development") {
+        socket.join("admins");
+      }
     });
 
     socket.on("disconnect", async (reason) => {

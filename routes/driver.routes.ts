@@ -33,15 +33,18 @@ import { checkOnboarding } from "../middlewares/checkOnboarding.middleware.js";
 
 const router = Router();
 
+import { validate } from "../middlewares/validate.middleware.js";
+import { updateDriverStatusSchema, updateDriverLocationSchema } from "../validators/driver.validator.js";
+
 // Admin Routes
 router.get("/all", jwtAuth, requireRole("admin"), getAllDrivers);
 router.get("/free", jwtAuth, requireRole("admin"), getFreeDrivers);
 router.get("/locations", jwtAuth, requireRole("admin"), getAllDriverLocations);
 
 // Driver Routes
-router.put("/toggle-online", jwtAuth, requireRole("driver"), toggleOnlineStatus);
+router.put("/toggle-online", jwtAuth, requireRole("driver"), validate(updateDriverStatusSchema), toggleOnlineStatus);
 router.put("/reached-store", jwtAuth, requireRole("driver"), markReachedStoreStatus);
-router.put("/update-location", jwtAuth, requireRole("driver"), updateDriverLocation);
+router.put("/update-location", jwtAuth, requireRole("driver"), validate(updateDriverLocationSchema), updateDriverLocation);
 router.get("/profile", jwtAuth, requireRole("driver"), getDriverProfile);
 router.post("/documents", jwtAuth, requireRole("driver"), upload.fields([
     { name: "aadhar_front", maxCount: 1 },

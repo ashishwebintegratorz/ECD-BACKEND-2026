@@ -22,7 +22,15 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       .json({ message: err.message, errorCode: err.errorCode });
   }
 
+  const isProduction = process.env.NODE_ENV === "production";
+  const errorMessage = isProduction
+    ? "An unexpected internal server error occurred"
+    : `Internal Server Error: ${(err as any)?.message || String(err)}`;
+
   return res
     .status(HTTPSTATUS.INTERNAL_SERVER_ERROR)
-    .json({ message: `Internal Server Error: ${(err as any)?.message || String(err)}`, error: (err as any)?.message });
+    .json({
+      message: errorMessage,
+      ...(isProduction ? {} : { error: (err as any)?.message }),
+    });
 };

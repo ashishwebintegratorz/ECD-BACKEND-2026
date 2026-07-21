@@ -1,11 +1,13 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import rateLimit from "express-rate-limit";
+import helmet from "helmet";
 import { config } from "./config/app.config.js";
 import { errorHandler } from "./middlewares/errorHandler.middleware.js";
 import { HTTPSTATUS } from "./config/http.config.js";
 import { asyncHandler } from "./middlewares/asyncHandler.middleware.js";
+import { mongoSanitize } from "./middlewares/mongoSanitize.middleware.js";
+import { generalLimiter, authLimiter } from "./middlewares/rateLimiter.middleware.js";
 import userAuthRoutes from "./routes/userAuth.routes.js";
 import driverAuthRoutes from "./routes/driverAuth.routes.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -35,26 +37,43 @@ import { razorpayWebhook } from "./controllers/razorpay.controller.js";
 
 const app = express();
 app.set("trust proxy", 1);
-const BASE_PATH = config.BASE_PATH;
+const BASE_PATH = config.BASE_PATH; // Defaults to /api/v1
 
-// ── Rate Limiters ─────────────────────────────────────────────────────────────
+// Security Headers via Helmet
+app.use(helmet());
 
-// Strict: OTP endpoints — max 50 requests per 15 minutes per IP for dev
-const otpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 50,
-  message: { message: "Too many OTP requests. Please try again after 15 minutes." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// CORS - Explicit Whitelist configuration
+const allowedOrigins = [
+  config.FRONTEND_ORIGIN,
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+  "http://localhost:19006",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+].filter(Boolean);
 
-// General: all API routes — max 200 requests per minute per IP
-const generalLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 200,
-  message: { message: "Too many requests. Please slow down." },
-  standardHeaders: true,
-  legacyHeaders: false,
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+  })
+);
+
+// Backward compatibility alias: rewrite /api/... to /api/v1/...
+app.use((req, _res, next) => {
+  if (req.url.startsWith("/api/") && !req.url.startsWith("/api/v1/")) {
+    req.url = req.url.replace("/api/", "/api/v1/");
+  }
+  next();
 });
 
 // 🟢 Razorpay Webhook (MUST be before express.json() for raw body verification)
@@ -64,22 +83,17 @@ app.post(
   razorpayWebhook
 );
 
-// CORS
-app.use(
-  cors({
-    origin: true, // Allow all origins in development
-    credentials: true,
-  })
-);
-
-// Body
+// Body Parsing
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+// NoSQL Injection Protection
+app.use(mongoSanitize);
 
 // General rate limit on all API routes
 app.use(`${BASE_PATH}`, generalLimiter);
 
-// Health
+// Health Check
 app.get(
   `/`,
   asyncHandler(async (_req, res) => {
@@ -90,11 +104,12 @@ app.get(
   })
 );
 
-// routes
-// Auth
-app.use(`${BASE_PATH}/auth/user`, otpLimiter, userAuthRoutes);
-app.use(`${BASE_PATH}/auth/driver`, otpLimiter, driverAuthRoutes);
-app.use(`${BASE_PATH}/auth/admin`, otpLimiter, authRoutes);
+// Auth routes (with dedicated auth rate limiting)
+app.use(`${BASE_PATH}/auth/user`, authLimiter, userAuthRoutes);
+app.use(`${BASE_PATH}/auth/driver`, authLimiter, driverAuthRoutes);
+app.use(`${BASE_PATH}/auth/admin`, authLimiter, authRoutes);
+
+// Protected & Resource Routes
 app.use(`${BASE_PATH}/user`, userRoutes);
 app.use(`${BASE_PATH}/admin`, adminRoutes);
 app.use(`${BASE_PATH}/categories`, categoryRoutes);
@@ -111,7 +126,6 @@ app.use(`${BASE_PATH}/refunds`, refundRoutes);
 app.use(`${BASE_PATH}/notifications`, notificationRoutes);
 app.use(`${BASE_PATH}/coupons`, couponRoutes);
 app.use(`${BASE_PATH}/popular-dishes`, popularDishRoutes);
-// app.use(`${BASE_PATH}/grocery`, groceryRoutes); // Grocery services disabled
 
 app.use(`${BASE_PATH}/upload`, uploadRoutes);
 app.use(`${BASE_PATH}/settings`, settingsRoutes);
@@ -120,7 +134,7 @@ app.use(`${BASE_PATH}/issues`, issueRoutes);
 
 app.use(`${BASE_PATH}/razorpay`, razorpayRoutes);
 
-// error handler (last)
+// Global Error Handler
 app.use(errorHandler);
 
 export default app;
