@@ -50,6 +50,7 @@ export function createAuthTokens(user: IUser) {
     sub: user._id.toString(),
     role: user.role,
     phone: user.phone,
+    tv: user.tokenVersion || 0,
   };
 
   const accessToken = signAccessJwt(payload);
@@ -74,4 +75,61 @@ export function createAuthTokens(user: IUser) {
     refreshToken,
     user: safeUser,
   };
+}
+
+export function formatRemainingTime(ms: number): string {
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes} minute(s) and ${seconds} second(s)`;
+  }
+  return `${seconds} second(s)`;
+}
+
+export async function checkAccountLockout(user: IUser): Promise<{ isLocked: boolean; remainingText?: string }> {
+  if (user.lockUntil && user.lockUntil.getTime() > Date.now()) {
+    const remainingMs = user.lockUntil.getTime() - Date.now();
+    return {
+      isLocked: true,
+      remainingText: formatRemainingTime(remainingMs),
+    };
+  }
+  // If lock period has expired, clear lockUntil and failedLoginAttempts
+  if (user.lockUntil && user.lockUntil.getTime() <= Date.now()) {
+    user.lockUntil = undefined as any;
+    user.failedLoginAttempts = 0;
+    await user.save();
+  }
+  return { isLocked: false };
+}
+
+export async function recordFailedLoginAttempt(user: IUser, clientIp: string): Promise<{ isLockedNow: boolean; attempts: number; remainingText?: string }> {
+  user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+  
+  if (user.failedLoginAttempts >= 5) {
+    user.lockUntil = new Date(Date.now() + 5 * 60 * 1000); // Lock for 5 minutes
+    await user.save();
+    console.warn(`[SECURITY WARN] Account locked for 5 minutes (phone: ${user.phone}, IP: ${clientIp}) due to 5 consecutive failed login attempts.`);
+    return {
+      isLockedNow: true,
+      attempts: user.failedLoginAttempts,
+      remainingText: "5 minute(s) and 0 second(s)",
+    };
+  } else {
+    await user.save();
+    console.warn(`[SECURITY LOG] Failed login attempt ${user.failedLoginAttempts}/5 for phone: ${user.phone}, IP: ${clientIp}`);
+    return {
+      isLockedNow: false,
+      attempts: user.failedLoginAttempts,
+    };
+  }
+}
+
+export async function clearAccountLockout(user: IUser): Promise<void> {
+  if ((user.failedLoginAttempts && user.failedLoginAttempts > 0) || user.lockUntil) {
+    user.failedLoginAttempts = 0;
+    user.lockUntil = undefined as any;
+    await user.save();
+  }
 }

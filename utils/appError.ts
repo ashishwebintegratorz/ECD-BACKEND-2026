@@ -45,3 +45,10 @@ export class InternalServerException extends AppError {
     super(message, HTTPSTATUS.INTERNAL_SERVER_ERROR);
   }
 }
+
+export class TooManyRequestsException extends AppError {
+  constructor(message = "Too Many Requests") {
+    super(message, HTTPSTATUS.TOO_MANY_REQUESTS);
+  }
+}
+

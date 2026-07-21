@@ -21,8 +21,8 @@ export const jwtAuth = async (
 
     const token = parts[1];
 
-    if (token === "RESTAURANT_TEST_TOKEN") {
-      (req as any).user = { id: "000000000000000000000000", role: "admin" };
+    if (token === "RESTAURANT_TEST_TOKEN" && process.env.NODE_ENV !== "production") {
+      (req as any).user = { _id: "000000000000000000000000", id: "000000000000000000000000", role: "admin" };
       return next();
     }
 
@@ -31,6 +31,10 @@ export const jwtAuth = async (
     const user = await UserModel.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException("User not found");
+    }
+
+    if (payload.tv !== undefined && user.tokenVersion !== undefined && payload.tv < user.tokenVersion) {
+      throw new UnauthorizedException("Token has been revoked. Please log in again.");
     }
 
     (req as any).user = user;

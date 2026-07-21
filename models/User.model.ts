@@ -33,6 +33,9 @@ export interface IUser extends Document {
   };
   createdAt: Date;
   updatedAt: Date;
+  tokenVersion?: number;
+  failedLoginAttempts?: number;
+  lockUntil?: Date;
   meta?: Record<string, any>;
 }
 
@@ -43,6 +46,9 @@ const UserSchema = new Schema<IUser>(
     role: { type: String, enum: ["customer", "driver", "admin"], default: "customer" },
     isVerified: { type: Boolean, default: false },
     pinHash: { type: String },
+    tokenVersion: { type: Number, default: 0 },
+    failedLoginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date, default: null },
     avatar: { type: String },
     email: { type: String, index: true, sparse: true },
     googleId: { type: String, unique: true, sparse: true },
