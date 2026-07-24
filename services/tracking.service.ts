@@ -1,4 +1,5 @@
 import axios from "axios";
+import { config } from "../config/app.config.js";
 
 const GOOGLE_MAPS_DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json";
 
@@ -49,11 +50,12 @@ export const getRouteFromORS = async (
   end: IRoutePoint
 ): Promise<IRouteData | null> => {
   try {
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    const apiKey = config.GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
-      console.error("GOOGLE_MAPS_API_KEY is not set in .env");
+      console.error("GOOGLE_MAPS_API_KEY is not set in configuration");
       return null;
     }
+
 
     const response = await axios.get(GOOGLE_MAPS_DIRECTIONS_URL, {
       params: {

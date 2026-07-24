@@ -3,7 +3,7 @@ import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import UserModel from "../models/User.model.js";
 import OrderModel from "../models/Order.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
-import { emitDriverLocation } from "../socket/orderSocket.js";
+import { emitDriverLocation, emitDriverStatusUpdate } from "../socket/orderSocket.js";
 import { uploadToImageKit } from "../services/imagekit.service.js";
 
 /**
@@ -72,6 +72,8 @@ export const toggleOnlineStatus = asyncHandler(async (req: Request, res: Respons
         updateObj,
         { new: true }
     );
+
+    emitDriverStatusUpdate(user._id.toString(), isOnline, { user: updatedUser });
 
     return res.json({ message: `Status updated to ${isOnline ? "Online" : "Offline"}`, user: updatedUser });
 });

@@ -7,9 +7,10 @@ import PaymentTransaction from "../models/PaymentTransaction.model.js";
 import Restaurant from "../models/Restaurant.model.js";
 import { emitNewOrderToRestaurant } from "../socket/orderSocket.js";
 import { incrementCouponUsage } from "./coupon.service.js";
+import { config } from "../config/app.config.js";
 
 const PLATFORM_FEE_PERCENT = 0.10;
-const PLATFORM_REF_ID = process.env.PLATFORM_REF_ID ?? "000000000000000000000001";
+const PLATFORM_REF_ID = config.PLATFORM_REF_ID;
 
 const calculateSplit = (totalAmount: number, deliveryCharge: number) => {
     const platformFee = Math.round(totalAmount * PLATFORM_FEE_PERCENT);
@@ -17,6 +18,7 @@ const calculateSplit = (totalAmount: number, deliveryCharge: number) => {
     const driverNet = deliveryCharge;
     return { storeNet, driverNet, platformFee };
 };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STOCK VALIDATION

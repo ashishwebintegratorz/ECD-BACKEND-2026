@@ -1,23 +1,15 @@
 import { Request, Response } from "express";
 import Category from "../models/Category.model.js";
-import cloudinary from "../config/cloudinary.js";
+import { uploadToImageKit } from "../services/imagekit.service.js";
 import { BadRequestException, NotFoundException } from "../utils/appError.js";
 
 // Create slug helper
 const toSlug = (name: string) =>
   name.toLowerCase().trim().replace(/\s+/g, "-");
 
-const uploadToCloudinary = (file: Express.Multer.File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: "categories" },
-      (err, result) => {
-        if (err || !result) return reject(err);
-        resolve(result.secure_url);
-      }
-    );
-    stream.end(file.buffer);
-  });
+const uploadImageFile = async (file: Express.Multer.File): Promise<string> =>
+  uploadToImageKit(file.buffer, file.originalname || "category.jpg", "/categories");
+
 
 // ----------------------------
 // 1️⃣ Add Category
@@ -40,7 +32,7 @@ export const addCategory = async (req: Request, res: Response) => {
   // Accept image from file upload OR from imageUrl string in body
   let image = "";
   if (req.file) {
-    image = await uploadToCloudinary(req.file as Express.Multer.File);
+    image = await uploadImageFile(req.file as Express.Multer.File);
   } else if (imageUrl && typeof imageUrl === "string" && imageUrl.startsWith("http")) {
     image = imageUrl;
   }
@@ -98,7 +90,7 @@ export const updateCategory = async (req: Request, res: Response) => {
 
   let imageUrl = category.image;
   if (req.file) {
-    imageUrl = await uploadToCloudinary(req.file as Express.Multer.File);
+    imageUrl = await uploadImageFile(req.file as Express.Multer.File);
   }
 
   const updated = await Category.findByIdAndUpdate(

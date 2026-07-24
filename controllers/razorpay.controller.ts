@@ -1,21 +1,12 @@
 import PaymentTransaction from "../models/PaymentTransaction.model.js";
 import { Request, Response } from "express";
 import crypto from "crypto";
-import Razorpay from "razorpay";
+import { razorpay } from "../config/razorpay.config.js";
+import { config } from "../config/app.config.js";
 
 import {
   confirmOrderLogic,
 } from "../services/order.service.js";
-
-const razorpay = new Razorpay({
-
-  key_id:
-    process.env.RAZORPAY_KEY_ID!,
-
-  key_secret:
-    process.env.RAZORPAY_KEY_SECRET!,
-
-});
 
 export const createRazorpayOrder =
   async (
@@ -82,9 +73,7 @@ export const razorpayWebhook =
 
     try {
 
-      const webhookSecret =
-        process.env
-          .RAZORPAY_WEBHOOK_SECRET!;
+      const webhookSecret = config.RAZORPAY_WEBHOOK_SECRET;
 
       const razorpaySignature =
         req.headers[
@@ -101,6 +90,7 @@ export const razorpayWebhook =
           )
           .update(req.body)
           .digest("hex");
+
 
       if (
         expectedSignature !==

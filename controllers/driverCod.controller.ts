@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import User from "../models/User.model.js";
 import { razorpay } from "../config/razorpay.config.js";
+import { config } from "../config/app.config.js";
 import crypto from "crypto";
 
 export const getCodBalance = asyncHandler(async (req: Request, res: Response) => {
@@ -60,9 +61,10 @@ export const verifyCodPayment = asyncHandler(async (req: Request, res: Response)
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     const expectedSignature = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+        .createHmac("sha256", config.RAZORPAY_KEY_SECRET)
         .update(`${razorpay_order_id}|${razorpay_payment_id}`)
         .digest("hex");
+
 
     if (expectedSignature !== razorpay_signature) {
         return res.status(400).json({ message: "Invalid payment signature" });

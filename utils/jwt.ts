@@ -9,8 +9,23 @@ export function signAccessJwt(payload: string | JwtPayload): string {
 }
 
 export function verifyAccessJwt<T = JwtPayload>(token: string): T {
-  const secret: Secret = config.JWT_ACCESS_SECRET;
-  return jwt.verify(token, secret) as T;
+  const primarySecret: Secret = config.JWT_ACCESS_SECRET;
+  try {
+    return jwt.verify(token, primarySecret) as T;
+  } catch (err) {
+    const fallbackSecretsRaw = process.env.JWT_ACCESS_SECRET_FALLBACKS;
+    if (fallbackSecretsRaw) {
+      const fallbacks = fallbackSecretsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+      for (const fallback of fallbacks) {
+        try {
+          return jwt.verify(token, fallback) as T;
+        } catch {
+          // continue checking remaining fallbacks
+        }
+      }
+    }
+    throw err;
+  }
 }
 
 export function signRefreshJwt(payload: string | JwtPayload): string {
@@ -20,6 +35,22 @@ export function signRefreshJwt(payload: string | JwtPayload): string {
 }
 
 export function verifyRefreshJwt<T = JwtPayload>(token: string): T {
-  const secret: Secret = config.JWT_REFRESH_SECRET;
-  return jwt.verify(token, secret) as T;
+  const primarySecret: Secret = config.JWT_REFRESH_SECRET;
+  try {
+    return jwt.verify(token, primarySecret) as T;
+  } catch (err) {
+    const fallbackSecretsRaw = process.env.JWT_REFRESH_SECRET_FALLBACKS;
+    if (fallbackSecretsRaw) {
+      const fallbacks = fallbackSecretsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+      for (const fallback of fallbacks) {
+        try {
+          return jwt.verify(token, fallback) as T;
+        } catch {
+          // continue checking remaining fallbacks
+        }
+      }
+    }
+    throw err;
+  }
 }
+
