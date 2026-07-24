@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import Restaurant from "../models/Restaurant.model.js";
 import Product from "../models/Product.model.js";
 import Category from "../models/Category.model.js";
-import cloudinary from "../config/cloudinary.js";
+import { uploadToImageKit } from "../services/imagekit.service.js";
 import { NotFoundException, BadRequestException, InternalServerException } from "../utils/appError.js";
 import { slugify } from "../validators/restaurant.validator.js";
 
@@ -22,17 +22,8 @@ const haversineKm = ([lng1, lat1]: [number, number], [lng2, lat2]: [number, numb
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const uploadToCloudinary = (file: Express.Multer.File): Promise<string> =>
-    new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-            { folder: "grocery-products" },
-            (err, result) => {
-                if (err || !result) return reject(err);
-                resolve(result.secure_url);
-            }
-        );
-        stream.end(file.buffer);
-    });
+const uploadProductImage = async (file: Express.Multer.File): Promise<string> =>
+    uploadToImageKit(file.buffer, file.originalname || "product.jpg", "/grocery-products");
 
 const parseVariants = async (req: Request) => {
     let variants: any[] = [];
@@ -48,7 +39,8 @@ const parseVariants = async (req: Request) => {
     for (let i = 0; i < variants.length; i++) {
         const variantFiles = files?.filter((f) => f.fieldname === `variantImages_${i}`) ?? [];
         const uploadedUrls: string[] = [];
-        for (const file of variantFiles) uploadedUrls.push(await uploadToCloudinary(file));
+        for (const file of variantFiles) uploadedUrls.push(await uploadProductImage(file));
+
 
         const oldImages = variants[i].images?.filter((url: string) => url.startsWith("http")) || [];
         variants[i].images = [...oldImages, ...uploadedUrls];

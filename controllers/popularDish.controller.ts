@@ -1,20 +1,10 @@
 import { Request, Response } from "express";
 import PopularDish from "../models/PopularDish.model.js";
-import cloudinary from "../config/cloudinary.js";
+import { uploadToImageKit } from "../services/imagekit.service.js";
 import { BadRequestException, NotFoundException } from "../utils/appError.js";
 
-// Helper to upload image to Cloudinary
-const uploadToCloudinary = (file: Express.Multer.File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: "popular_dishes" },
-      (err, result) => {
-        if (err || !result) return reject(err);
-        resolve(result.secure_url);
-      }
-    );
-    stream.end(file.buffer);
-  });
+const uploadDishImage = async (file: Express.Multer.File): Promise<string> =>
+  uploadToImageKit(file.buffer, file.originalname || "dish.jpg", "/popular_dishes");
 
 // Create slug helper
 const toSlug = (name: string) =>
@@ -31,7 +21,7 @@ export const addPopularDish = async (req: Request, res: Response) => {
 
   let imageUrl = image;
   if (req.file) {
-    imageUrl = await uploadToCloudinary(req.file);
+    imageUrl = await uploadDishImage(req.file);
   }
 
   if (!imageUrl) throw new BadRequestException("Image file or URL is required");
@@ -63,7 +53,7 @@ export const updatePopularDish = async (req: Request, res: Response) => {
   if (isActive !== undefined) dish.isActive = isActive === "true" || isActive === true;
 
   if (req.file) {
-    dish.image = await uploadToCloudinary(req.file);
+    dish.image = await uploadDishImage(req.file);
   }
 
   await dish.save();
@@ -76,3 +66,4 @@ export const deletePopularDish = async (req: Request, res: Response) => {
   if (!dish) throw new NotFoundException("Dish not found");
   return res.json({ success: true, message: "Dish deleted successfully" });
 };
+

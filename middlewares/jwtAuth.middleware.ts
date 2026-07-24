@@ -21,12 +21,8 @@ export const jwtAuth = async (
 
     const token = parts[1];
 
-    if (token === "RESTAURANT_TEST_TOKEN" && process.env.NODE_ENV !== "production") {
-      (req as any).user = { _id: "000000000000000000000000", id: "000000000000000000000000", role: "admin" };
-      return next();
-    }
-
     const payload: any = verifyAccessJwt(token);
+
 
     const user = await UserModel.findById(payload.sub);
     if (!user) {

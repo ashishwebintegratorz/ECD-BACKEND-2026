@@ -1,23 +1,22 @@
+import { config } from "../config/app.config.js";
+
 /**
  * AiSensy WhatsApp Business API — OTP Provider
  * Sends OTP via WhatsApp message using AiSensy campaign template
- *
- * Required .env variables:
- *   AISENSY_API_KEY=your_api_key
- *   AISENSY_CAMPAIGN_NAME=otp_verification
  */
 
 const AISENSY_API_URL = "https://backend.aisensy.com/campaign/t1/api/v2";
 
 export async function sendSms(phone: string, message: string): Promise<boolean> {
-  const apiKey = process.env.AISENSY_API_KEY;
-  const campaignName = process.env.AISENSY_CAMPAIGN_NAME || "otp_verification";
+  const apiKey = config.AISENSY_API_KEY;
+  const campaignName = config.AISENSY_CAMPAIGN_NAME;
 
   // Fallback to console in development if key not set
   if (!apiKey) {
     console.log(`[OTP - DEV MODE] ${phone} -> ${message}`);
     return true;
   }
+
 
   // AiSensy expects phone in international format without +
   // Indian numbers: 9876543210 → 919876543210

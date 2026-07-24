@@ -8,6 +8,7 @@ import { slugify } from "../validators/restaurant.validator.js";
 import { Types } from "mongoose";
 import { createAndSendOtp, verifyOtp } from "../services/otp.service.js";
 import Notification from "../models/Notification.model.js";
+import { emitRestaurantStatusUpdate } from "../socket/orderSocket.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -577,20 +578,25 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const toggleRestaurantActive = async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
-    const { isOnline } = req.body || {};
+    const { isOnline, isActive } = req.body || {};
 
     const restaurant = await Restaurant.findById(restaurantId);
     if (!restaurant) {
         return res.status(404).json({ message: "Restaurant not found" });
     }
 
-    restaurant.isOnline = isOnline !== undefined ? isOnline : !restaurant.isOnline;
+    if (isActive !== undefined) restaurant.isActive = isActive;
+    if (isOnline !== undefined) restaurant.isOnline = isOnline;
+    if (isActive === undefined && isOnline === undefined) restaurant.isOnline = !restaurant.isOnline;
+
     await restaurant.save();
+    emitRestaurantStatusUpdate(restaurant._id.toString(), restaurant.isOnline, restaurant.isActive, restaurant);
 
     return res.json({
         success: true,
         message: `Restaurant is now ${restaurant.isOnline ? "online" : "offline"}`,
         isOnline: restaurant.isOnline,
+        isActive: restaurant.isActive,
     });
 };
 

@@ -66,7 +66,7 @@ export async function createAndSendOtp(
       return { ok: true };
     }
 
-    const apiKey = process.env.TWO_FACTOR_API_KEY;
+    const apiKey = config.TWO_FACTOR_API_KEY;
     if (apiKey) {
       const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKARTOTP`;
       const response = await axios.get(url);
@@ -84,7 +84,7 @@ export async function createAndSendOtp(
 
 export async function sendPickupOtpSms(phone: string, code: string) {
   try {
-    const apiKey = process.env.TWO_FACTOR_API_KEY;
+    const apiKey = config.TWO_FACTOR_API_KEY;
     if (apiKey) {
       const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKARTOTP`;
       const response = await axios.get(url);
@@ -104,7 +104,7 @@ export async function sendDeliveryOtpSms(phone: string, code: string) {
     console.log(`[TESTING DELIVERY OTP] Code is: ${code}`);
     console.log(`=========================================\n`);
 
-    const apiKey = process.env.TWO_FACTOR_API_KEY;
+    const apiKey = config.TWO_FACTOR_API_KEY;
     if (apiKey) {
       const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKARTOTP`;
       const response = await axios.get(url);
@@ -113,6 +113,7 @@ export async function sendDeliveryOtpSms(phone: string, code: string) {
       console.log(`[2Factor OTP] API key missing, skipped sending delivery OTP SMS to ${phone}`);
     }
   } catch (error: any) {
+
     console.error("[2Factor OTP] Failed to send delivery OTP:", error.message || error);
   }
 }

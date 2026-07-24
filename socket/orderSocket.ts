@@ -11,13 +11,34 @@ export function setIo(instance: Server) {
   io = instance;
 }
 
+/**
+ * On server boot, clean up orphan online statuses left behind by crashed/abruptly closed test processes.
+ */
+export async function syncOrphanOnlineStatuses() {
+  try {
+    const offlineDrivers = await UserModel.updateMany(
+      { role: "driver", isOnline: true },
+      { isOnline: false }
+    );
+    const offlineRestaurants = await RestaurantModel.updateMany(
+      { isOnline: true },
+      { isOnline: false }
+    );
+    console.log(`[Status Sync] Reset orphan online statuses on startup: ${offlineDrivers.modifiedCount} drivers, ${offlineRestaurants.modifiedCount} restaurants set offline.`);
+  } catch (err) {
+    console.error("[Status Sync Error]:", err);
+  }
+}
+
 export function initOrderSocket(instance: Server) {
+  // Reset orphan statuses on socket server initialization
+  syncOrphanOnlineStatuses();
+
   // Socket Handshake Authentication Middleware
   instance.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(" ")[1];
       if (!token) {
-        // If token missing, allow connection in development with limited access or reject
         if (process.env.NODE_ENV === "development") {
           (socket as any).user = { role: "guest" };
           return next();
@@ -70,6 +91,33 @@ export function initOrderSocket(instance: Server) {
       driverSockets.set(socket.id, driverId);
     });
 
+    // Direct Socket Toggle for Driver Online Status
+    socket.on("toggleDriverStatus", async (data: { isOnline: boolean }) => {
+      const driverId = user?._id?.toString() || driverSockets.get(socket.id);
+      if (!driverId) return;
+      const isOnline = Boolean(data.isOnline);
+      const updatedUser = await UserModel.findByIdAndUpdate(
+        driverId,
+        { isOnline, isReturning: false },
+        { new: true }
+      );
+      emitDriverStatusUpdate(driverId, isOnline, { user: updatedUser });
+      console.log(`[Socket] Driver ${driverId} status toggled via socket to ${isOnline ? "Online" : "Offline"}`);
+    });
+
+    // Direct Socket Toggle for Restaurant Online Status
+    socket.on("toggleRestaurantStatus", async (data: { restaurantId: string; isOnline?: boolean; isActive?: boolean }) => {
+      const restaurantId = data.restaurantId || restaurantSockets.get(socket.id);
+      if (!restaurantId) return;
+      const restaurant = await RestaurantModel.findById(restaurantId);
+      if (!restaurant) return;
+      if (data.isOnline !== undefined) restaurant.isOnline = data.isOnline;
+      if (data.isActive !== undefined) restaurant.isActive = data.isActive;
+      await restaurant.save();
+      emitRestaurantStatusUpdate(restaurantId, restaurant.isOnline, restaurant.isActive, restaurant);
+      console.log(`[Socket] Restaurant ${restaurantId} status toggled via socket: isOnline=${restaurant.isOnline}, isActive=${restaurant.isActive}`);
+    });
+
     // Admin room (Requires admin role check)
     socket.on("joinAdmin", () => {
       if (user?.role === "admin" || process.env.NODE_ENV === "development") {
@@ -84,8 +132,12 @@ export function initOrderSocket(instance: Server) {
       if (driverId) {
         try {
           driverSockets.delete(socket.id);
-          await UserModel.findByIdAndUpdate(driverId, { isOnline: false });
-          console.log(`[Socket] Driver ${driverId} marked offline due to disconnect.`);
+          const hasOtherSockets = Array.from(driverSockets.values()).includes(driverId);
+          if (!hasOtherSockets) {
+            await UserModel.findByIdAndUpdate(driverId, { isOnline: false });
+            emitDriverStatusUpdate(driverId, false);
+            console.log(`[Socket] Driver ${driverId} marked offline and broadcasted on disconnect.`);
+          }
         } catch (err) {
           console.error("Error setting driver offline on disconnect:", err);
         }
@@ -95,14 +147,36 @@ export function initOrderSocket(instance: Server) {
       if (restaurantId) {
         try {
           restaurantSockets.delete(socket.id);
-          await RestaurantModel.findByIdAndUpdate(restaurantId, { isOnline: false });
-          console.log(`[Socket] Restaurant ${restaurantId} marked offline due to disconnect.`);
+          const hasOtherSockets = Array.from(restaurantSockets.values()).includes(restaurantId);
+          if (!hasOtherSockets) {
+            await RestaurantModel.findByIdAndUpdate(restaurantId, { isOnline: false });
+            emitRestaurantStatusUpdate(restaurantId, false);
+            console.log(`[Socket] Restaurant ${restaurantId} marked offline and broadcasted on disconnect.`);
+          }
         } catch (err) {
           console.error("Error setting restaurant offline on disconnect:", err);
         }
       }
     });
   });
+}
+
+// Real-time broadcast for Driver Online/Offline status changes
+export function emitDriverStatusUpdate(driverId: string, isOnline: boolean, extraData?: any) {
+  if (!io) return;
+  const payload = { driverId, isOnline, timestamp: new Date().toISOString(), ...extraData };
+  io.to("admins").emit("driverStatusChanged", payload);
+  io.to(`driver_${driverId}`).emit("driverStatusChanged", payload);
+  io.emit("driverStatusUpdated", payload);
+}
+
+// Real-time broadcast for Restaurant Online/Offline/Active status changes
+export function emitRestaurantStatusUpdate(restaurantId: string, isOnline: boolean, isActive?: boolean, extraData?: any) {
+  if (!io) return;
+  const payload = { restaurantId, isOnline, isActive, timestamp: new Date().toISOString(), ...extraData };
+  io.to("admins").emit("restaurantStatusChanged", payload);
+  io.to(`restaurant_${restaurantId}`).emit("restaurantStatusChanged", payload);
+  io.emit("restaurantStatusUpdated", payload);
 }
 
 // Notify customer + admin when order status changes
