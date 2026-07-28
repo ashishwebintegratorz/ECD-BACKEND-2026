@@ -663,7 +663,7 @@ export const getRestaurantProfile = async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
 
     let restaurant = null;
-    if (restaurantId && restaurantId.match(/^[0-9a-fA-F]{24}$/)) {
+    if (typeof restaurantId === 'string' && restaurantId.match(/^[0-9a-fA-F]{24}$/)) {
         restaurant = await Restaurant.findById(restaurantId);
     }
     if (!restaurant) {
