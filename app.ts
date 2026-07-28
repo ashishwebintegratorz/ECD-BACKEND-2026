@@ -45,6 +45,7 @@ app.use(helmet());
 // CORS - Explicit Whitelist configuration
 const allowedOrigins = [
   config.FRONTEND_ORIGIN,
+  "https://ecd-admin.onrender.com",
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:5173",
