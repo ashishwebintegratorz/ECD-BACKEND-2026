@@ -22,8 +22,11 @@ export const jwtAuth = async (
     const token = parts[1];
 
     if (token === "RESTAURANT_TEST_TOKEN") {
-       (req as any).user = { role: "admin", _id: "69ef47bf77c29363016a95e5" };
-       return next();
+      (req as any).user = {
+        _id: "69ef47bf77c29363016a95e5",
+        role: "admin",
+      };
+      return next();
     }
 
     const payload: any = verifyAccessJwt(token);

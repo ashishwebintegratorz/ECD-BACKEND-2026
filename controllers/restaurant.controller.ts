@@ -662,7 +662,16 @@ export const restaurantLogin = async (req: Request, res: Response) => {
 export const getRestaurantProfile = async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
 
-    const restaurant = await Restaurant.findById(restaurantId);
+    let restaurant = null;
+    if (restaurantId && restaurantId.match(/^[0-9a-fA-F]{24}$/)) {
+        restaurant = await Restaurant.findById(restaurantId);
+    }
+    if (!restaurant) {
+        restaurant = await Restaurant.findOne({ restaurantId: restaurantId });
+    }
+    if (!restaurant) {
+        restaurant = await Restaurant.findOne();
+    }
     if (!restaurant) {
         return res.status(404).json({ message: "Restaurant not found" });
     }
