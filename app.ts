@@ -59,7 +59,8 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
+      const isLocalhost = origin && (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:"));
+      if (!origin || allowedOrigins.includes(origin) || isLocalhost || process.env.NODE_ENV !== "production") {
         callback(null, true);
       } else {
         callback(null, false);
