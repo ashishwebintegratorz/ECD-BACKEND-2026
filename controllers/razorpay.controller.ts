@@ -3,6 +3,8 @@ import { Request, Response } from "express";
 import crypto from "crypto";
 import { razorpay } from "../config/razorpay.config.js";
 import { config } from "../config/app.config.js";
+import User from "../models/User.model.js";
+import CodSettlement from "../models/CodSettlement.model.js";
 
 import {
   confirmOrderLogic,
@@ -157,6 +159,27 @@ export const razorpayWebhook =
       if (
         event === "payment.captured"
       ) {
+
+        const notes = payment.notes || {};
+        if (notes.type === "cod_settlement" && notes.driverId) {
+            const driverId = notes.driverId;
+            const driver = await User.findById(driverId);
+            if (driver) {
+                const amountToPay = Math.max(0, (driver.codBalance || 0) - (driver.codEarnings || 0));
+                
+                // Only update and log if there is an amount to settle
+                if (amountToPay > 0) {
+                    driver.codBalance = 0;
+                    driver.codEarnings = 0;
+                    await driver.save();
+                    
+                    await CodSettlement.create({ driver: driver._id, amount: amountToPay, type: "full" });
+                }
+            }
+            return res.json({
+                received: true,
+            });
+        }
 
         const txn =
           await PaymentTransaction

@@ -4,6 +4,7 @@ import User from "../models/User.model.js";
 import { razorpay } from "../config/razorpay.config.js";
 import { config } from "../config/app.config.js";
 import crypto from "crypto";
+import CodSettlement from "../models/CodSettlement.model.js";
 
 export const getCodBalance = asyncHandler(async (req: Request, res: Response) => {
     const driverId = (req as any).user.id;
@@ -47,6 +48,10 @@ export const initiateCodPayment = asyncHandler(async (req: Request, res: Respons
         currency: "INR",
         receipt: `cod_${driver._id.toString().slice(-6)}_${Date.now()}`,
         payment_capture: true,
+        notes: {
+            type: "cod_settlement",
+            driverId: driver._id.toString()
+        }
     });
 
     return res.json({
@@ -76,10 +81,16 @@ export const verifyCodPayment = asyncHandler(async (req: Request, res: Response)
     }
 
     // Reset COD balance and earnings as the settlement is complete
+    const amountToPay = Math.max(0, (driver.codBalance || 0) - (driver.codEarnings || 0));
+
     driver.codBalance = 0;
     driver.codEarnings = 0;
     
     await driver.save();
+
+    if (amountToPay > 0) {
+        await CodSettlement.create({ driver: driver._id, amount: amountToPay, type: "full" });
+    }
 
     return res.json({ message: "COD settlement successful!", codBalance: 0, codEarnings: 0, walletBalance: driver.walletBalance || 0 });
 });
