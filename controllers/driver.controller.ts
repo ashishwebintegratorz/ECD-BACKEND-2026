@@ -233,3 +233,42 @@ export const logoutDriver = asyncHandler(async (req: Request, res: Response) => 
 
     return res.json({ message: "Logged out successfully" });
 });
+
+/**
+ * Driver: Delete account permanently
+ */
+export const deleteDriverAccount = asyncHandler(async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        if (!user || (!user._id && !user.id)) {
+            return res.status(400).json({ success: false, message: "Driver ID missing" });
+        }
+
+        const driverId = user._id || user.id;
+
+        const driver = await UserModel.findById(driverId);
+        if (!driver) {
+            return res.status(404).json({ success: false, message: "Driver not found" });
+        }
+
+        if (driver.codBalance && driver.codBalance > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `You have pending COD dues of ₹${driver.codBalance}. Please clear your dues before deleting your account.` 
+            });
+        }
+
+        if (driver.walletBalance && driver.walletBalance > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `You have a pending payout of ₹${driver.walletBalance}. Please request a withdrawal before deleting your account.` 
+            });
+        }
+
+        await UserModel.findByIdAndDelete(driverId);
+        return res.json({ success: true, message: "Account deleted successfully" });
+    } catch (error: any) {
+        console.error("Delete driver account error:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});

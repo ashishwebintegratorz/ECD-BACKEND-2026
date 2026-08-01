@@ -9,6 +9,8 @@ import { Types } from "mongoose";
 import { createAndSendOtp, verifyOtp } from "../services/otp.service.js";
 import Notification from "../models/Notification.model.js";
 import { emitRestaurantStatusUpdate } from "../socket/orderSocket.js";
+import UserModel from "../models/User.model.js";
+import { signAccessJwt } from "../utils/jwt.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -637,6 +639,11 @@ export const restaurantLogin = async (req: Request, res: Response) => {
         return res.status(401).json({ message: "Your restaurant account has been blocked. Please contact admin." });
     }
 
+    const token = signAccessJwt({
+        sub: restaurant._id.toString(),
+        role: "restaurant"
+    });
+
     // Self-healing: if an existing restaurant lacks a restaurantId, generate and save it
     if (!restaurant.restaurantId) {
         let restaurantId = '';
@@ -645,10 +652,9 @@ export const restaurantLogin = async (req: Request, res: Response) => {
         await restaurant.save();
     }
 
-    // For the current MVP setup, we use the test token bypass. 
-    // In production, sign a proper JWT here.
+    // Sign a proper JWT here instead of test token bypass
     return res.json({
-        token: "RESTAURANT_TEST_TOKEN",
+        token,
         _id: restaurant._id,
         restaurantId: restaurant.restaurantId,
         name: restaurant.name,
@@ -1114,6 +1120,41 @@ export const getPastMenuApprovals = async (req: Request, res: Response) => {
         
         return res.json({ success: true, pastItems });
     } catch (error: any) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Vendor: Delete account permanently
+ */
+export const vendorDeleteAccount = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        if (!user || (!user._id && !user.id)) {
+            return res.status(400).json({ success: false, message: "Restaurant ID missing" });
+        }
+
+        const restaurantId = user._id || user.id;
+
+        const restaurant = await Restaurant.findById(restaurantId);
+        if (!restaurant) {
+            return res.status(404).json({ success: false, message: "Restaurant not found" });
+        }
+
+        if (restaurant.walletBalance && restaurant.walletBalance > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `First you have to clear your pending payout (₹${restaurant.walletBalance}) with the admin. Once the admin clears your payment, you can permanently delete your account.` 
+            });
+        }
+
+        // We assume the user _id matches the Restaurant _id or the restaurant auth mapping.
+        await Restaurant.findByIdAndDelete(restaurantId);
+        await UserModel.findByIdAndDelete(restaurantId);
+        
+        return res.json({ success: true, message: "Account deleted successfully" });
+    } catch (error: any) {
+        console.error("Delete restaurant account error:", error);
         return res.status(500).json({ success: false, message: error.message });
     }
 };

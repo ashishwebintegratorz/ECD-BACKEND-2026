@@ -25,7 +25,8 @@ import {
     adminApproveMenuItem,
     getPendingMenuItems,
     vendorRequestDeleteMenuItem,
-    getPastMenuApprovals
+    getPastMenuApprovals,
+    vendorDeleteAccount
 } from "../controllers/restaurant.controller.js";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
@@ -205,5 +206,8 @@ router.get(
 
 // DELETE /api/restaurants/:restaurantId/menu/:itemId/request-delete
 router.delete("/:restaurantId/menu/:itemId/request-delete", jwtAuth, requireRole("admin"), validateObjectId("restaurantId", "itemId"), asyncHandler(vendorRequestDeleteMenuItem));
+
+// DELETE /api/restaurants/vendor/delete-account
+router.delete("/vendor/delete-account", jwtAuth, requireRole("restaurant" as any, "admin"), asyncHandler(vendorDeleteAccount));
 
 export default router;

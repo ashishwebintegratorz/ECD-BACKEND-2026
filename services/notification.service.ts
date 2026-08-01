@@ -1,6 +1,7 @@
 import admin from "../config/firebase.config.js";
 import Device from "../models/Device.model.js";
 import Notification from "../models/Notification.model.js";
+import NotificationQueue from "../models/NotificationQueue.model.js";
 
 export type NotificationType =
     | "order_placed"
@@ -42,43 +43,20 @@ export const sendPushToUser = async (opts: SendOptions): Promise<void> => {
         read: false,
     });
 
-    // Get all FCM tokens for this user
-    const devices = await Device.find({ user: userId });
-    if (devices.length === 0) return; // user has no registered devices
-
-    const tokens = devices.map((d) => d.fcmToken);
-
+    // Queue the push notification for processing by the background worker
     try {
-        const response = await admin.messaging().sendEachForMulticast({
-            tokens,
-            notification: { title, body },
-            data: { type, ...data },
-            android: { priority: "high" },
-            apns: { payload: { aps: { sound: "default" } } },
+        await NotificationQueue.create({
+            userId,
+            title,
+            body,
+            type,
+            data,
+            status: "pending",
+            retryCount: 0,
+            nextRetryAt: new Date(),
         });
-
-        // Remove invalid/stale tokens
-        const staleTokens: string[] = [];
-        response.responses.forEach((res, idx) => {
-            if (!res.success) {
-                const code = res.error?.code;
-                if (
-                    code === "messaging/invalid-registration-token" ||
-                    code === "messaging/registration-token-not-registered"
-                ) {
-                    staleTokens.push(tokens[idx]);
-                }
-            }
-        });
-
-        if (staleTokens.length > 0) {
-            await Device.deleteMany({ user: userId, fcmToken: { $in: staleTokens } });
-            console.log(`[ECD KART Push] Removed ${staleTokens.length} stale token(s) for user ${userId}`);
-        }
-
-        console.log(`[ECD KART Push] Sent "${title}" to user ${userId} — success: ${response.successCount}/${tokens.length}`);
     } catch (err) {
-        console.error(`[ECD KART Push] Failed to send notification to user ${userId}:`, err);
+        console.error(`[ECD KART Queue] Failed to queue notification for user ${userId}:`, err);
     }
 };
 

@@ -11,6 +11,7 @@ import {
     getDriverProfile,
     updateDriverProfile,
     logoutDriver,
+    deleteDriverAccount,
 } from "../controllers/driver.controller.js";
 import { getDriverSummary, getMonthlyPerformance } from "../controllers/driverPerformance.controller.js";
 import { 
@@ -53,6 +54,7 @@ router.post("/documents", jwtAuth, requireRole("driver"), upload.fields([
     { name: "profile_image", maxCount: 1 }
 ]), updateDriverProfile);
 router.post("/logout", jwtAuth, requireRole("driver"), logoutDriver);
+router.delete("/delete-account", jwtAuth, requireRole("driver"), deleteDriverAccount);
 router.get("/summary", jwtAuth, requireRole("driver"), getDriverSummary);
 router.get("/performance/monthly", jwtAuth, requireRole("driver"), getMonthlyPerformance);
 

@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { UnauthorizedException } from "../utils/appError.js";
 import { verifyAccessJwt } from "../utils/jwt.js";
 import UserModel from "../models/User.model.js";
+import Restaurant from "../models/Restaurant.model.js";
 
 export const jwtAuth = async (
   req: Request,
@@ -24,6 +25,7 @@ export const jwtAuth = async (
     if (token === "RESTAURANT_TEST_TOKEN") {
       (req as any).user = {
         _id: "69ef47bf77c29363016a95e5",
+        id: "69ef47bf77c29363016a95e5",
         role: "admin",
       };
       return next();
@@ -31,6 +33,18 @@ export const jwtAuth = async (
 
     const payload: any = verifyAccessJwt(token);
 
+    if (payload.role === "restaurant") {
+      const restaurant = await Restaurant.findById(payload.sub);
+      if (!restaurant) {
+        throw new UnauthorizedException("Restaurant not found");
+      }
+      (req as any).user = restaurant;
+      // Provide role fallback for authorization checks
+      if (!(req as any).user.role) {
+        (req as any).user.role = "restaurant";
+      }
+      return next();
+    }
 
     const user = await UserModel.findById(payload.sub);
     if (!user) {
