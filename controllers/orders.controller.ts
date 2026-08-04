@@ -542,8 +542,21 @@ export const cancelOrder = async (req: Request, res: Response) => {
   const order = await Order.findOne({ _id: orderId, customer: userId });
   if (!order) return res.status(404).json({ message: "Order not found" });
 
-  if (!["pending", "preparing"].includes(order.status))
+  if (!["pending", "preparing"].includes(order.status)) {
+    if (order.status === "cancelled") {
+      return res.status(400).json({ message: "Order is already cancelled" });
+    }
+    if (order.status === "ready") {
+      return res.status(400).json({ message: "Food is already prepared, cancellation is not possible" });
+    }
+    if (order.status === "picked_up" || order.deliveryStatus === "out_for_delivery") {
+      return res.status(400).json({ message: "Order is out for delivery, cannot be cancelled" });
+    }
+    if (order.status === "delivered") {
+      return res.status(400).json({ message: "Order is already delivered" });
+    }
     return res.status(400).json({ message: "Order cannot be cancelled now" });
+  }
 
   // Enforce 5-minute cancellation window
   const now = new Date();
