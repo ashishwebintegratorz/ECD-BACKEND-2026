@@ -1033,7 +1033,7 @@ export const getPendingMenuItems = async (req: Request, res: Response) => {
             rest.menu.forEach(item => {
                 if (["pending", "delete_pending"].includes((item as any).approvalStatus)) {
                     pendingItems.push({
-                        restaurantId: rest.restaurantId,
+                        restaurantId: rest._id,
                         restaurantName: rest.name,
                         _id: (item as any)._id,
                         name: item.name,
@@ -1102,7 +1102,7 @@ export const getPastMenuApprovals = async (req: Request, res: Response) => {
             rest.menu.forEach(item => {
                 if (["approved", "rejected", "deleted"].includes((item as any).approvalStatus)) {
                     pastItems.push({
-                        restaurantId: rest.restaurantId,
+                        restaurantId: rest._id,
                         restaurantName: rest.name,
                         _id: (item as any)._id,
                         name: item.name,

@@ -337,8 +337,15 @@ export const processRestaurantPayout = async (req: Request, res: Response) => {
 // ADMIN: Get Rider COD Summary
 // ════════════════════════════════════════════════════════════════════════════════════════════════════
 export const getRiderCodSummary = async (_req: Request, res: Response) => {
-    // Only fetch drivers that have a COD balance > 0
-    const drivers = await User.find({ role: "driver", codBalance: { $gt: 0 } })
+    // Fetch drivers that have a COD balance > 0 OR have past COD settlements
+    const settledDriverIds = await CodSettlement.distinct("driver");
+    const drivers = await User.find({ 
+        role: "driver", 
+        $or: [
+            { codBalance: { $gt: 0 } },
+            { _id: { $in: settledDriverIds } }
+        ]
+    })
         .select("name phone riderId codBalance codEarnings walletBalance")
         .lean();
 
@@ -447,8 +454,8 @@ export const deductRiderCod = async (req: Request, res: Response) => {
 // ADMIN: Get Rider COD Settlement History
 // ==============================================================================================================================
 export const getRiderCodHistory = async (req: Request, res: Response) => {
-    const { riderId } = req.params;
-    const history = await CodSettlement.find({ driver: riderId }).sort({ settledAt: -1 }).lean();
+    const { id } = req.params;
+    const history = await CodSettlement.find({ driver: id }).sort({ settledAt: -1 }).lean();
     return res.json({ history });
 };
 
