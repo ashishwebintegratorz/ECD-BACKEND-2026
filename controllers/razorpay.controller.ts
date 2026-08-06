@@ -23,7 +23,14 @@ export const createRazorpayOrder =
           message: "Request body is missing",
         });
       }
-      const { amount } = req.body;
+      const { amount, orderId } = req.body;
+
+      if (!orderId) {
+        return res.status(400).json({
+          success: false,
+          message: "orderId is required",
+        });
+      }
 
       if (!amount) {
         return res.status(400).json({
@@ -32,9 +39,22 @@ export const createRazorpayOrder =
         });
       }
 
+      const OrderModel = (await import("../models/Order.model.js")).default;
+      const orderDoc = await OrderModel.findById(orderId);
+      
+      if (!orderDoc) {
+        return res.status(404).json({
+          success: false,
+          message: "Order not found",
+        });
+      }
+
+      // Re-calculate or use the trusted server-side payable amount
+      const serverAmount = orderDoc.payableAmount;
+
       const options = {
 
-        amount: Math.round(amount * 100),
+        amount: Math.round(serverAmount * 100),
 
         currency: "INR",
 
@@ -61,7 +81,7 @@ export const createRazorpayOrder =
       res.status(500).json({
         success: false,
         message: "Failed to create Razorpay order",
-        error: error instanceof Error ? error.message : String(error),
+        error: "Internal Server Error",
       });
     }
 

@@ -89,31 +89,36 @@ export const getDashboard = async (req: Request, res: Response) => {
 // ?role=customer|driver|admin&search=&page=&limit=
 // ─────────────────────────────────────────────────────────────────────────────
 export const getAllUsers = async (req: Request, res: Response) => {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(50, Number(req.query.limit) || 20);
-    const role = req.query.role as string | undefined;
-    const search = req.query.search as string | undefined;
+    const role = req.query.role as string;
+    const search = req.query.search as string;
+    
+    // Pagination defaults
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100); // Max 100 per page
+    const skip = (page - 1) * limit;
 
     const query: any = {};
-    if (role) query.role = role;
+    if (role && role !== "all") query.role = role;
     if (search) {
         query.$or = [
             { name: { $regex: search, $options: "i" } },
-            { phone: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
+            { phone: { $regex: search, $options: "i" } }
         ];
     }
 
-    const [users, total] = await Promise.all([
-        User.find(query)
-            .select("-pinHash")
-            .sort({ createdAt: -1 })
-            .skip((page - 1) * limit)
-            .limit(limit),
-        User.countDocuments(query),
-    ]);
+    const total = await User.countDocuments(query);
+    const users = await User.find(query)
+        .select("-pinHash")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
 
-    return res.json({ users, total, totalPages: Math.ceil(total / limit), page, limit });
+    return res.json({
+        users,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
+    });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -155,13 +160,20 @@ export const toggleUserBlock = async (req: Request, res: Response) => {
     if (typeof blocked !== "boolean")
         throw new BadRequestException("blocked must be a boolean");
 
-    const user = await User.findByIdAndUpdate(
-        req.params.id,
-        { isVerified: !blocked },
-        { new: true }
-    ).select("-pinHash");
-
+    const user = await User.findById(req.params.id).select("-pinHash");
     if (!user) throw new NotFoundException("User not found");
+
+    user.isVerified = !blocked;
+
+    // If blocking/suspending, increment tokenVersion to immediately revoke all active JWT tokens
+    if (blocked) {
+        user.tokenVersion = (user.tokenVersion || 0) + 1;
+        user.status = "suspended";
+    } else {
+        user.status = "active";
+    }
+
+    await user.save();
 
     return res.json({
         message: blocked ? "User blocked" : "User unblocked",

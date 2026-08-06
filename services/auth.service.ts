@@ -24,10 +24,11 @@ export async function findOrCreateUserByPhone(
     // Save name if provided and not already set
     if (name && !user.name) user.name = name;
 
-    // Allow upgrading from customer to driver/admin if requested
-    if (requestedRole && requestedRole !== "customer" && user.role === "customer") {
-      user.role = requestedRole;
-      if (requestedRole === "driver" && !user.riderId) {
+    // Allow upgrading from customer to driver only if creating a driver account specifically
+    // Do NOT allow arbitrary upgrades to admin
+    if (requestedRole === "driver" && user.role === "customer") {
+      user.role = "driver";
+      if (!user.riderId) {
         user.riderId = `DRV-${Math.floor(1000 + Math.random() * 9000)}`;
       }
     }
@@ -75,6 +76,27 @@ export function createAuthTokens(user: IUser) {
     refreshToken,
     user: safeUser,
   };
+}
+
+import crypto from "crypto";
+import RefreshTokenModel from "../models/RefreshToken.model.js";
+
+export async function createAuthTokensWithDb(user: IUser, ip?: string, userAgent?: string) {
+  const tokens = createAuthTokens(user);
+  
+  // Store refresh token hash in DB
+  const tokenHash = crypto.createHash('sha256').update(tokens.refreshToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+  
+  await RefreshTokenModel.create({
+    user: user._id,
+    tokenHash,
+    ip,
+    userAgent,
+    expiresAt
+  });
+  
+  return tokens;
 }
 
 export function formatRemainingTime(ms: number): string {

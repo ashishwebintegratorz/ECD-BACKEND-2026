@@ -10,7 +10,7 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(1, "JWT_ACCESS_SECRET is required"),
   JWT_REFRESH_SECRET: z.string().min(1, "JWT_REFRESH_SECRET is required"),
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
-  JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
+  JWT_REFRESH_EXPIRES_IN: z.string().default("30d"),
 
   OTP_EXPIRES_MINUTES: z.string().default("5"),
   FRONTEND_ORIGIN: z.string().default("http://localhost:5173"),
@@ -81,7 +81,7 @@ const parseConfig = (): AppConfig => {
     JWT_ACCESS_SECRET: (env.JWT_ACCESS_SECRET || "super-long-random-access-secret") as Secret,
     JWT_REFRESH_SECRET: (env.JWT_REFRESH_SECRET || "super-long-random-refresh-secret") as Secret,
     JWT_ACCESS_EXPIRES_IN: env.JWT_ACCESS_EXPIRES_IN || "15m",
-    JWT_REFRESH_EXPIRES_IN: env.JWT_REFRESH_EXPIRES_IN || "7d",
+    JWT_REFRESH_EXPIRES_IN: env.JWT_REFRESH_EXPIRES_IN || "30d",
 
     OTP_EXPIRES_MINUTES: env.OTP_EXPIRES_MINUTES || "5",
     FRONTEND_ORIGIN: env.FRONTEND_ORIGIN || "http://localhost:5173",

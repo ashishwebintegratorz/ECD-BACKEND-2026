@@ -3,7 +3,7 @@ import { ForbiddenException } from "../utils/appError.js";
 import type { UserRole } from "../models/User.model.js";
 
 export const requireRole =
-    (...allowedRoles: UserRole[]) =>
+    (...allowedRoles: (UserRole | "restaurant")[]) =>
         (req: Request, _res: Response, next: NextFunction) => {
             const user = (req as any).user;
             if (!user) {

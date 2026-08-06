@@ -65,13 +65,13 @@ router.put("/update-status/:orderId", jwtAuth, requireRole("admin"), validateObj
 router.put("/assign-driver/:orderId", jwtAuth, requireRole("admin"), validateObjectId("orderId"), validate(assignDriverSchema), asyncHandler(assignOrderToDriver));
 
 // ─── Restaurant ───────────────────────────────────────────────────────────────
-router.get("/restaurant/:restaurantId", jwtAuth, requireRole("admin"), validateObjectId("restaurantId"), asyncHandler(getRestaurantOrders));
-router.patch("/restaurant/prepare/:orderId", jwtAuth, requireRole("admin"), validateObjectId("orderId"), asyncHandler(restaurantMarkPreparing));
-router.patch("/restaurant/ready/:orderId", jwtAuth, requireRole("admin"), validateObjectId("orderId"), asyncHandler(restaurantMarkReady));
-router.post("/restaurant/verify-pickup/:orderId", jwtAuth, requireRole("admin"), validateObjectId("orderId"), asyncHandler(restaurantVerifyPickup));
-router.patch("/restaurant/cancel/:orderId", jwtAuth, requireRole("admin"), validateObjectId("orderId"), asyncHandler(restaurantCancelOrder));
-router.post("/restaurant/send-pickup-otp/:orderId", jwtAuth, requireRole("admin"), validateObjectId("orderId"), asyncHandler(sendPickupOtp));
-router.post("/restaurant/complete-pickup/:orderId", jwtAuth, requireRole("admin"), validateObjectId("orderId"), asyncHandler(restaurantCompletePickup));
+router.get("/restaurant/:restaurantId", jwtAuth, requireRole("restaurant", "admin"), validateObjectId("restaurantId"), asyncHandler(getRestaurantOrders));
+router.patch("/restaurant/prepare/:orderId", jwtAuth, requireRole("restaurant", "admin"), validateObjectId("orderId"), asyncHandler(restaurantMarkPreparing));
+router.patch("/restaurant/ready/:orderId", jwtAuth, requireRole("restaurant", "admin"), validateObjectId("orderId"), asyncHandler(restaurantMarkReady));
+router.post("/restaurant/verify-pickup/:orderId", jwtAuth, requireRole("restaurant", "admin"), validateObjectId("orderId"), asyncHandler(restaurantVerifyPickup));
+router.patch("/restaurant/cancel/:orderId", jwtAuth, requireRole("restaurant", "admin"), validateObjectId("orderId"), asyncHandler(restaurantCancelOrder));
+router.post("/restaurant/send-pickup-otp/:orderId", jwtAuth, requireRole("restaurant", "admin"), validateObjectId("orderId"), asyncHandler(sendPickupOtp));
+router.post("/restaurant/complete-pickup/:orderId", jwtAuth, requireRole("restaurant", "admin"), validateObjectId("orderId"), asyncHandler(restaurantCompletePickup));
 
 // ─── Driver ───────────────────────────────────────────────────────────────────
 router.get("/driver/my-orders", jwtAuth, requireRole("driver"), checkOnboarding, asyncHandler(getDriverOrders));

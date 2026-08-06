@@ -17,7 +17,19 @@ async function start() {
 
   const io = new IOServer(server, {
     cors: {
-      origin: "*",
+      origin: [
+        config.FRONTEND_ORIGIN,
+        "https://ecd-admin.onrender.com",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:19006",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+      ].filter(Boolean) as string[],
+      credentials: true,
     }
   });
 

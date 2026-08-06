@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "nodemon",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "audit": "npm audit"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@types/uuid": "^10.0.0",
     "axios": "^1.16.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
@@ -29,6 +31,7 @@
     "node-cron": "^4.6.0",
     "razorpay": "^2.9.8",
     "socket.io": "^4.8.1",
+    "uuid": "^14.0.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -45,4 +48,3 @@
     "typescript": "^5.9.3"
   }
 }
-

@@ -23,6 +23,9 @@ export const jwtAuth = async (
     const token = parts[1];
 
     if (token === "RESTAURANT_TEST_TOKEN") {
+      if (process.env.NODE_ENV !== "development") {
+        throw new UnauthorizedException("Test token not allowed in this environment");
+      }
       (req as any).user = {
         _id: "69ef47bf77c29363016a95e5",
         id: "69ef47bf77c29363016a95e5",

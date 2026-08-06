@@ -5,6 +5,7 @@ import { createAndSendOtp, verifyOtp } from "../services/otp.service.js";
 import {
   findOrCreateUserByPhone,
   createAuthTokens,
+  createAuthTokensWithDb,
   setUserPin,
   checkAccountLockout,
   recordFailedLoginAttempt,
@@ -16,7 +17,7 @@ import {
   UnauthorizedException,
 } from "../utils/appError.js";
 import UserModel from "../models/User.model.js";
-import { verifyRefreshJwt, signAccessJwt } from "../utils/jwt.js";
+import { verifyRefreshJwt } from "../utils/jwt.js";
 
 /**
  * DRIVER: Send OTP
@@ -68,7 +69,9 @@ export const verifyOtpController = asyncHandler(
     // Reset lockout counter on successful verification
     await clearAccountLockout(user);
 
-    const auth = createAuthTokens(user);
+    const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+    const userAgent = req.headers["user-agent"];
+    const auth = await createAuthTokensWithDb(user, ip, userAgent);
 
     return res.json({
       token: auth.accessToken,
@@ -124,7 +127,8 @@ export const loginWithPin = asyncHandler(
     // 2. Clear lockout counter on successful authentication
     await clearAccountLockout(user);
 
-    const auth = createAuthTokens(user);
+    const userAgent = req.headers["user-agent"];
+    const auth = await createAuthTokensWithDb(user, clientIp, userAgent);
 
     return res.json({
       token: auth.accessToken,
@@ -151,6 +155,15 @@ export const refreshTokenController = asyncHandler(
       throw new UnauthorizedException("Invalid refresh token");
     }
 
+    const crypto = await import("crypto");
+    const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const RefreshTokenModel = (await import("../models/RefreshToken.model.js")).default;
+    const storedToken = await RefreshTokenModel.findOne({ tokenHash });
+    
+    if (!storedToken || storedToken.revoked) {
+      throw new UnauthorizedException("Invalid or revoked refresh token");
+    }
+
     const user = await UserModel.findById(payload.sub);
     if (!user || user.role !== "driver") {
       throw new UnauthorizedException("Unauthorized access");
@@ -160,7 +173,13 @@ export const refreshTokenController = asyncHandler(
       throw new UnauthorizedException("Your account has been blocked. Please contact admin.");
     }
 
-    const auth = createAuthTokens(user);
+    // Revoke old token and create new one (Rotation)
+    storedToken.revoked = true;
+    await storedToken.save();
+
+    const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+    const userAgent = req.headers["user-agent"];
+    const auth = await createAuthTokensWithDb(user, ip, userAgent);
 
     return res.json({
       token: auth.accessToken,

@@ -4,6 +4,7 @@ import { createAndSendOtp, verifyOtp } from "../services/otp.service.js";
 import {
   findOrCreateUserByPhone,
   createAuthTokens,
+  createAuthTokensWithDb,
 } from "../services/auth.service.js";
 import {
   BadRequestException,
@@ -11,8 +12,10 @@ import {
   UnauthorizedException,
 } from "../utils/appError.js";
 import UserModel from "../models/User.model.js";
-import { verifyRefreshJwt, signAccessJwt } from "../utils/jwt.js";
+import RefreshTokenModel from "../models/RefreshToken.model.js";
+import { verifyRefreshJwt } from "../utils/jwt.js";
 import admin from "../config/firebase.config.js";
+import crypto from "crypto";
 
 /**
  * CUSTOMER: Send OTP
@@ -45,7 +48,9 @@ export const verifyOtpController = asyncHandler(
     }
 
     const user = await findOrCreateUserByPhone(phone, "customer", name);
-    const auth = createAuthTokens(user);
+    const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+    const userAgent = req.headers["user-agent"];
+    const auth = await createAuthTokensWithDb(user, ip, userAgent);
 
     return res.json({
       token: auth.accessToken,
@@ -72,12 +77,25 @@ export const refreshTokenController = asyncHandler(
       throw new UnauthorizedException("Invalid refresh token");
     }
 
+    const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const storedToken = await RefreshTokenModel.findOne({ tokenHash });
+    
+    if (!storedToken || storedToken.revoked) {
+      throw new UnauthorizedException("Invalid or revoked refresh token");
+    }
+
     const user = await UserModel.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException("User not found");
     }
 
-    const auth = createAuthTokens(user);
+    // Revoke old token and create new one (Rotation)
+    storedToken.revoked = true;
+    await storedToken.save();
+
+    const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+    const userAgent = req.headers["user-agent"];
+    const auth = await createAuthTokensWithDb(user, ip, userAgent);
 
     return res.json({
       token: auth.accessToken,
@@ -95,19 +113,35 @@ export const refreshAccessToken = async (req: Request, res: Response, next: Func
       return res.status(401).json({ message: "Missing refresh token" });
     }
 
-    const payload = verifyRefreshJwt(refreshToken);
+    let payload: any;
+    try {
+      payload = verifyRefreshJwt(refreshToken);
+    } catch {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+
+    // Check against DB-stored token hash (rotation system)
+    const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const storedToken = await RefreshTokenModel.findOne({ tokenHash });
+
+    if (!storedToken || storedToken.revoked) {
+      return res.status(401).json({ message: "Invalid or revoked refresh token" });
+    }
 
     const user = await UserModel.findById(payload.sub);
     if (!user) {
       return res.status(401).json({ message: "Invalid refresh token" });
     }
 
-    const newAccessToken = signAccessJwt({
-      sub: user._id.toString(),
-      role: user.role,
-    });
+    // Rotate: revoke old, issue new
+    storedToken.revoked = true;
+    await storedToken.save();
 
-    return res.json({ token: newAccessToken });
+    const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+    const userAgent = req.headers["user-agent"];
+    const auth = await createAuthTokensWithDb(user, ip, userAgent);
+
+    return res.json({ token: auth.accessToken, refreshToken: auth.refreshToken });
   } catch (err) {
     next(err);
   }
@@ -124,9 +158,12 @@ export const googleLoginController = asyncHandler(async (req: Request, res: Resp
     
     // Check if user already exists by googleId
     let existingUser = await UserModel.findOne({ googleId: decodedToken.uid });
+    
+    const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+    const userAgent = req.headers["user-agent"];
 
     if (existingUser) {
-      const auth = createAuthTokens(existingUser);
+      const auth = await createAuthTokensWithDb(existingUser, ip, userAgent);
       return res.json({
         token: auth.accessToken,
         refreshToken: auth.refreshToken,
@@ -145,7 +182,7 @@ export const googleLoginController = asyncHandler(async (req: Request, res: Resp
 
         await existingUser.save();
 
-        const auth = createAuthTokens(existingUser);
+        const auth = await createAuthTokensWithDb(existingUser, ip, userAgent);
         return res.json({
           token: auth.accessToken,
           refreshToken: auth.refreshToken,
@@ -210,7 +247,9 @@ export const verifyGooglePhoneController = asyncHandler(async (req: Request, res
   });
 
   // 4. Generate Tokens
-  const auth = createAuthTokens(user);
+  const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+  const userAgent = req.headers["user-agent"];
+  const auth = await createAuthTokensWithDb(user, ip, userAgent);
 
   return res.json({
     token: auth.accessToken,

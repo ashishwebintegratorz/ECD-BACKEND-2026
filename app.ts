@@ -35,6 +35,8 @@ import bannerRoutes from "./routes/banner.routes.js";
 import issueRoutes from "./routes/issue.routes.js";
 import { razorpayWebhook } from "./controllers/razorpay.controller.js";
 
+import { requireJsonContent } from "./middlewares/contentType.middleware.js";
+
 const app = express();
 app.set("trust proxy", 1);
 const BASE_PATH = config.BASE_PATH; // Defaults to /api/v1
@@ -85,9 +87,20 @@ app.post(
   razorpayWebhook
 );
 
+import { v4 as uuidv4 } from "uuid";
+
+// Add request ID
+app.use((req, _res, next) => {
+  (req as any).id = uuidv4();
+  next();
+});
+
 // Body Parsing
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ limit: "1mb", extended: true }));
+
+// Content-Type validation
+app.use(requireJsonContent);
 
 // NoSQL Injection Protection
 app.use(mongoSanitize);

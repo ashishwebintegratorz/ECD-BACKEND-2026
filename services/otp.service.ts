@@ -61,16 +61,17 @@ export async function createAndSendOtp(
   });
 
   try {
-    if (skipSms) {
-      console.log(`[2Factor OTP] Skipped sending SMS for user app testing. Code: ${code}`);
+    if (skipSms && process.env.NODE_ENV === "development") {
+      console.log(`[2Factor OTP] Skipped sending SMS for user app testing.`);
       return { ok: true };
     }
 
     const apiKey = config.TWO_FACTOR_API_KEY;
     if (apiKey) {
-      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKARTOTP`;
+      const encodedPhone = encodeURIComponent(phone);
+      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${encodedPhone}/${code}/ECDKARTOTP`;
       const response = await axios.get(url);
-      console.log("[2Factor OTP] Sent successfully:", response.data);
+      console.log("[2Factor OTP] Sent successfully");
     } else {
       console.log("[2Factor OTP] API key missing, skipped sending");
     }
@@ -86,9 +87,10 @@ export async function sendPickupOtpSms(phone: string, code: string) {
   try {
     const apiKey = config.TWO_FACTOR_API_KEY;
     if (apiKey) {
-      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKARTOTP`;
+      const encodedPhone = encodeURIComponent(phone);
+      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${encodedPhone}/${code}/ECDKARTOTP`;
       const response = await axios.get(url);
-      console.log(`[2Factor OTP] Pickup OTP sent to ${phone}:`, response.data);
+      console.log(`[2Factor OTP] Pickup OTP sent to ${phone}`);
     } else {
       console.log(`[2Factor OTP] API key missing, skipped sending pickup OTP to ${phone}`);
     }
@@ -99,16 +101,19 @@ export async function sendPickupOtpSms(phone: string, code: string) {
 
 export async function sendDeliveryOtpSms(phone: string, code: string) {
   try {
-    console.log(`\n=========================================`);
-    console.log(`[TESTING DELIVERY OTP] Send to ${phone}`);
-    console.log(`[TESTING DELIVERY OTP] Code is: ${code}`);
-    console.log(`=========================================\n`);
+    if (process.env.NODE_ENV === "development") {
+      console.log(`\n=========================================`);
+      console.log(`[TESTING DELIVERY OTP] Send to ${phone}`);
+      console.log(`[TESTING DELIVERY OTP] Code is: ${code}`);
+      console.log(`=========================================\n`);
+    }
 
     const apiKey = config.TWO_FACTOR_API_KEY;
     if (apiKey) {
-      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phone}/${code}/ECDKARTOTP`;
+      const encodedPhone = encodeURIComponent(phone);
+      const url = `https://2factor.in/API/V1/${apiKey}/SMS/${encodedPhone}/${code}/ECDKARTOTP`;
       const response = await axios.get(url);
-      console.log(`[2Factor OTP] Delivery OTP sent to ${phone}:`, response.data);
+      console.log(`[2Factor OTP] Delivery OTP sent to ${phone}`);
     } else {
       console.log(`[2Factor OTP] API key missing, skipped sending delivery OTP SMS to ${phone}`);
     }
