@@ -110,7 +110,7 @@ app.use(`${BASE_PATH}`, generalLimiter);
 
 // Health Check
 app.get(
-  `/`,
+  [`/`, `${BASE_PATH}/`],
   asyncHandler(async (_req, res) => {
     return res.status(HTTPSTATUS.OK).json({
       message: "ECD KART API is running",
@@ -136,6 +136,7 @@ app.use(`${BASE_PATH}/drivers`, driverRoutes);
 app.use(`${BASE_PATH}/invoices`, invoiceRoutes);
 app.use(`${BASE_PATH}/reviews`, reviewRoutes);
 app.use(`${BASE_PATH}/restaurants`, restaurantRoutes);
+app.use(`${BASE_PATH}/grocery`, groceryRoutes);
 app.use(`${BASE_PATH}/ledger`, ledgerRoutes);
 app.use(`${BASE_PATH}/refunds`, refundRoutes);
 app.use(`${BASE_PATH}/notifications`, notificationRoutes);
