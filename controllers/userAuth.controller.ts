@@ -36,27 +36,35 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
  */
 export const verifyOtpController = asyncHandler(
   async (req: Request, res: Response) => {
-    const { phone, code, name } = req.body;
+    try {
+      const requestId = Math.random().toString(36).substring(7);
+      console.log(`\n[${requestId}] 🔥 verifyOtpController CALLED for ${req.body.phone}`);
+      
+      const { phone, code, name } = req.body;
 
-    if (!phone || !code) {
-      throw new BadRequestException("Phone and OTP code are required");
+      if (!phone || !code) {
+        throw new BadRequestException("Phone and OTP code are required");
+      }
+
+      const verification = await verifyOtp(phone, code);
+      if (!verification.ok) {
+        throw new BadRequestException(verification.reason || "Invalid OTP");
+      }
+
+      const user = await findOrCreateUserByPhone(phone, "customer", name);
+      const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+      const userAgent = req.headers["user-agent"];
+      const auth = await createAuthTokensWithDb(user, ip, userAgent);
+
+      return res.json({
+        token: auth.accessToken,
+        refreshToken: auth.refreshToken,
+        user: auth.user,
+      });
+    } catch (error) {
+      console.error("🔥 VERIFY OTP FATAL ERROR:", error);
+      throw error;
     }
-
-    const verification = await verifyOtp(phone, code);
-    if (!verification.ok) {
-      throw new BadRequestException(verification.reason || "Invalid OTP");
-    }
-
-    const user = await findOrCreateUserByPhone(phone, "customer", name);
-    const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
-    const userAgent = req.headers["user-agent"];
-    const auth = await createAuthTokensWithDb(user, ip, userAgent);
-
-    return res.json({
-      token: auth.accessToken,
-      refreshToken: auth.refreshToken,
-      user: auth.user,
-    });
   }
 );
 

@@ -123,39 +123,28 @@ export async function sendDeliveryOtpSms(phone: string, code: string) {
   }
 }
 
-export async function verifyOtp(
-  phone: string,
-  code: string
-) {
+export async function verifyOtp(phone: string, code: string) {
+  const otpDoc = await OtpModel.findOne({ phone }).sort({ createdAt: -1 });
 
-  const otpDoc =
-    await OtpModel.findOne({ phone })
-      .sort({ createdAt: -1 });
+  console.log(`\n🔍 [verifyOtp] Found OTP Doc:`, !!otpDoc);
+  if (otpDoc) {
+    console.log(`🔍 [verifyOtp] otpDoc.used: ${otpDoc.used}`);
+    console.log(`🔍 [verifyOtp] otpDoc.codeHash: (hidden)`);
+  }
 
   if (!otpDoc) {
-
     return {
-
       ok: false,
-
-      reason:
-        "OTP not found. Please request a new one.",
-
+      reason: "OTP not found. Please request a new one.",
     };
-
   }
 
   if (otpDoc.used) {
-
+    console.error(`❌ [verifyOtp] REJECTING BECAUSE otpDoc.used === true!`);
     return {
-
       ok: false,
-
-      reason:
-        "OTP already used. Please request a new one.",
-
+      reason: "OTP already used. Please request a new one.",
     };
-
   }
 
   if (

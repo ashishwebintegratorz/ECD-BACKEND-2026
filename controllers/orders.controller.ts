@@ -507,28 +507,41 @@ export const restaurantCancelOrder = async (req: Request, res: Response) => {
 
   await PaymentTransaction.updateMany({ order: order._id }, { status: "failed" });
 
-  // Create refund record — processed within 24 hours via cron
-  await createRefundRecord(
-    orderId,
-    order.orderNumber,
-    order.customer.toString(),
-    order.payableAmount,
-    `Restaurant cancelled: ${reason.trim()}`,
-    "restaurant"
-  );
+  const txn = await PaymentTransaction.findOne({ order: order._id }).sort({ createdAt: -1 });
+  const isCod = txn?.provider === "cod";
 
-  // Push: notify customer of cancellation + refund
+  if (!isCod) {
+    // Create refund record — processed within 24 hours via cron
+    await createRefundRecord(
+      orderId,
+      order.orderNumber,
+      order.customer.toString(),
+      order.payableAmount,
+      `Restaurant cancelled: ${reason.trim()}`,
+      "restaurant"
+    );
+    notifyRefundInitiated(order.customer.toString(), order.payableAmount, order.orderNumber).catch(() => { });
+  }
+
+  // Push: notify customer of cancellation
   notifyOrderCancelled(order.customer.toString(), order.orderNumber, reason.trim()).catch(() => { });
-  notifyRefundInitiated(order.customer.toString(), order.payableAmount, order.orderNumber).catch(() => { });
+
+  const dynamicMessage = isCod 
+      ? `Order cancelled by restaurant: ${reason.trim()}`
+      : `Order cancelled by restaurant: ${reason.trim()}. Auto-refund initiated.`;
 
   emitOrderStatusUpdate(orderId, {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
-    message: `Order cancelled by restaurant: ${reason.trim()}`,
+    message: dynamicMessage,
     updatedAt: (order as any).updatedAt,
   });
 
-  return res.json({ success: true, message: "Order cancelled by restaurant", order });
+  return res.json({ 
+    success: true, 
+    message: isCod ? "Order cancelled successfully." : "Order cancelled. Auto-refund initiated.", 
+    order 
+  });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

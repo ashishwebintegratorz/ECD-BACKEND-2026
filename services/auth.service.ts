@@ -88,6 +88,10 @@ export async function createAuthTokensWithDb(user: IUser, ip?: string, userAgent
   const tokenHash = crypto.createHash('sha256').update(tokens.refreshToken).digest('hex');
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
   
+  // Delete old refresh tokens for this user to prevent duplicate key errors 
+  // if the DB index was created as unique, and to keep the collection clean.
+  await RefreshTokenModel.deleteMany({ user: user._id });
+
   await RefreshTokenModel.create({
     user: user._id,
     tokenHash,
