@@ -34,7 +34,15 @@ export async function createAndSendOtp(
 
   await OtpModel.deleteMany({ phone });
 
-  const code = generateOtpCode();
+  // Play Store / App Store Test Accounts
+  const TEST_ACCOUNTS: Record<string, string> = {
+    "+919876543210": "4829", // User App Test Number
+    "+919876543211": "7194", // Rider App Test Number
+    "+919876543212": "5921", // Restaurant App Test Number
+  };
+
+  const isTestAccount = TEST_ACCOUNTS[phone] !== undefined;
+  const code = isTestAccount ? TEST_ACCOUNTS[phone] : generateOtpCode();
 
   const codeHash =
     await bcrypt.hash(code, 10);
@@ -59,6 +67,11 @@ export async function createAndSendOtp(
     used: false,
 
   });
+
+  if (isTestAccount) {
+    console.log(`[TEST ACCOUNT] Skipped SMS for test number ${phone}. Using OTP: ${code}`);
+    return { ok: true };
+  }
 
   try {
     if (skipSms && process.env.NODE_ENV === "development") {
