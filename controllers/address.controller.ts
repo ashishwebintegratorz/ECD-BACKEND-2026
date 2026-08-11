@@ -5,26 +5,31 @@ import { Request, Response } from "express";
 
 // 🟢 Add new address
 export const addAddress = async (req: Request, res: Response) => {
-  const userId = req.user.id;
-  const { fullAddress, latitude, longitude, label, apartment, landmark, phone, isDefault } = req.body;
+  try {
+    const userId = req.user.id;
+    const { fullAddress, latitude, longitude, label, apartment, landmark, phone, isDefault } = req.body;
 
-  const address = await Address.create({
-    user: userId,
-    fullAddress,
-    label,
-    apartment,
-    landmark,
-    phone,
-    isDefault,
-    location: {
-      type: "Point",
-      coordinates: [longitude, latitude],
-    },
-  });
+    const address = await Address.create({
+      user: userId,
+      fullAddress,
+      label,
+      apartment,
+      landmark,
+      phone,
+      isDefault,
+      location: {
+        type: "Point",
+        coordinates: [longitude, latitude],
+      },
+    });
 
-  await User.findByIdAndUpdate(userId, { $push: { addresses: address._id } });
+    await User.findByIdAndUpdate(userId, { $push: { addresses: address._id } });
 
-  res.json({ success: true, address });
+    res.json({ success: true, address });
+  } catch (error) {
+    console.error("🔥 addAddress Error: ", error);
+    res.status(400).json({ success: false, error: error.message });
+  }
 };
 
 // 🟢 Get logged-in user's addresses

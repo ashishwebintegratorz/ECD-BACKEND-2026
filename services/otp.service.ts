@@ -34,15 +34,17 @@ export async function createAndSendOtp(
 
   await OtpModel.deleteMany({ phone });
 
-  // Play Store / App Store Test Accounts
+  // Extract only the last 10 digits to handle phone numbers sent with or without +91
+  const normalizedPhone = phone.replace(/[^0-9]/g, '').slice(-10);
+
   const TEST_ACCOUNTS: Record<string, string> = {
-    "+919876543210": "4829", // User App Test Number
-    "+919876543211": "7194", // Rider App Test Number
-    "+919876543212": "5921", // Restaurant App Test Number
+    "9876543210": "4829",
+    "9876543211": "4829",
+    "9876543212": "4829",
   };
 
-  const isTestAccount = TEST_ACCOUNTS[phone] !== undefined;
-  const code = isTestAccount ? TEST_ACCOUNTS[phone] : generateOtpCode();
+  const isTestAccount = TEST_ACCOUNTS[normalizedPhone] !== undefined;
+  const code = isTestAccount ? TEST_ACCOUNTS[normalizedPhone] : generateOtpCode();
 
   const codeHash =
     await bcrypt.hash(code, 10);
@@ -55,17 +57,11 @@ export async function createAndSendOtp(
   );
 
   await OtpModel.create({
-
     phone,
-
     codeHash,
-
     expiresAt,
-
     attempts: 0,
-
     used: false,
-
   });
 
   if (isTestAccount) {
