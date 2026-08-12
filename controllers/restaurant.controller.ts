@@ -676,9 +676,6 @@ export const getRestaurantProfile = async (req: Request, res: Response) => {
         restaurant = await Restaurant.findOne({ restaurantId: restaurantId });
     }
     if (!restaurant) {
-        restaurant = await Restaurant.findOne();
-    }
-    if (!restaurant) {
         return res.status(404).json({ message: "Restaurant not found" });
     }
 
@@ -828,10 +825,13 @@ export const restaurantVerifyOtp = async (req: Request, res: Response) => {
         return res.status(401).json({ message: "Your restaurant account has been blocked. Please contact admin." });
     }
 
-    // For the current MVP setup, we use the test token bypass.
-    // In production, sign a proper JWT here.
+    const token = signAccessJwt({
+        sub: restaurant._id.toString(),
+        role: "restaurant"
+    });
+
     return res.json({
-        token: "RESTAURANT_TEST_TOKEN",
+        token,
         _id: restaurant._id,
         restaurantId: restaurant.restaurantId,
         message: "Login successful"
