@@ -10,7 +10,7 @@ export const uploadImage = async (req: Request, res: Response) => {
 
     try {
         const response = await imagekit.upload({
-            file: req.file.buffer, // required
+            file: req.file.buffer.toString("base64"), // required
             fileName: req.file.originalname, // required
             folder: "/ecd-backend", // optional
         });

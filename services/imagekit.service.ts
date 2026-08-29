@@ -13,8 +13,10 @@ export const uploadToImageKit = async (
 ): Promise<string> => {
     try {
         let rawFile = file;
-        if (file && typeof file === "object" && file.buffer) {
-            rawFile = file.buffer;
+        if (Buffer.isBuffer(file)) {
+            rawFile = file.toString("base64");
+        } else if (file && typeof file === "object" && file.buffer) {
+            rawFile = file.buffer.toString("base64");
         }
 
         const response = await imagekit.upload({
