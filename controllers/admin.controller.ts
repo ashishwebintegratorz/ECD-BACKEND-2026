@@ -5,6 +5,7 @@ import Restaurant from "../models/Restaurant.model.js";
 import PaymentTransaction from "../models/PaymentTransaction.model.js";
 import Refund from "../models/Refund.model.js";
 import CodSettlement from "../models/CodSettlement.model.js";
+import { emitAccountSuspended } from "../socket/orderSocket.js";
 import { BadRequestException, NotFoundException } from "../utils/appError.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,6 +170,7 @@ export const toggleUserBlock = async (req: Request, res: Response) => {
     if (blocked) {
         user.tokenVersion = (user.tokenVersion || 0) + 1;
         user.status = "suspended";
+        emitAccountSuspended(user._id.toString(), user.role);
     } else {
         user.status = "active";
     }
@@ -200,6 +202,10 @@ export const updateUserDetails = async (req: Request, res: Response) => {
     ).select("-pinHash");
 
     if (!user) throw new NotFoundException("User not found");
+
+    if (updateData.status === "suspended") {
+        emitAccountSuspended(user._id.toString(), user.role);
+    }
 
     return res.json({ message: "User details updated successfully", user });
 };

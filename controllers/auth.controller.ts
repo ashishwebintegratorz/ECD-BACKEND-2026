@@ -22,6 +22,11 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
   const { phone, role } = req.body;
   if (!phone) throw new BadRequestException("Phone required");
 
+  const user = await UserModel.findOne({ phone });
+  if (user && user.status === "suspended") {
+    throw new UnauthorizedException("Your account is suspended. You have to connect to admin.");
+  }
+
   await createAndSendOtp(phone);
 
   return res.json({
@@ -92,7 +97,7 @@ export const loginWithPin = asyncHandler(
     }
 
     if (user.status === "suspended") {
-      throw new UnauthorizedException("Your account has been blocked. Please contact admin.");
+      throw new UnauthorizedException("Your account is suspended. You have to connect to admin.");
     }
 
     // 1. Check if user account is currently locked

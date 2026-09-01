@@ -207,3 +207,13 @@ export function emitDriverLocation(driverId: string, payload: any) {
   if (!io) return;
   io.to("admins").emit("driverLocationUpdated", { driverId, ...payload });
 }
+
+// Notify user when they are suspended by admin
+export function emitAccountSuspended(userId: string, role: string) {
+  if (!io) return;
+  if (role === "driver") {
+    io.to(`driver_${userId}`).emit("accountSuspended", { reason: "Admin is suspended you. You can connect to admin." });
+  } else if (role === "restaurant") {
+    io.to(`restaurant_${userId}`).emit("accountSuspended", { reason: "Admin is suspended you. You can connect to admin." });
+  }
+}

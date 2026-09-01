@@ -36,6 +36,16 @@ export const jwtAuth = async (
 
     const payload: any = verifyAccessJwt(token);
 
+    if (payload.onboarding === true) {
+      (req as any).user = {
+        _id: payload.sub, // "temp_..."
+        phone: payload.phone,
+        role: payload.role || "driver",
+        onboarding: true
+      };
+      return next();
+    }
+
     if (payload.role === "restaurant") {
       const restaurant = await Restaurant.findById(payload.sub);
       if (!restaurant) {

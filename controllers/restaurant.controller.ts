@@ -8,7 +8,7 @@ import { slugify } from "../validators/restaurant.validator.js";
 import { Types } from "mongoose";
 import { createAndSendOtp, verifyOtp } from "../services/otp.service.js";
 import Notification from "../models/Notification.model.js";
-import { emitRestaurantStatusUpdate } from "../socket/orderSocket.js";
+import { emitRestaurantStatusUpdate, emitAccountSuspended } from "../socket/orderSocket.js";
 import UserModel from "../models/User.model.js";
 import { signAccessJwt } from "../utils/jwt.js";
 
@@ -587,7 +587,12 @@ export const toggleRestaurantActive = async (req: Request, res: Response) => {
         return res.status(404).json({ message: "Restaurant not found" });
     }
 
-    if (isActive !== undefined) restaurant.isActive = isActive;
+    if (isActive !== undefined) {
+        restaurant.isActive = isActive;
+        if (isActive === false) {
+            emitAccountSuspended(restaurant._id.toString(), "restaurant");
+        }
+    }
     if (isOnline !== undefined) restaurant.isOnline = isOnline;
     if (isActive === undefined && isOnline === undefined) restaurant.isOnline = !restaurant.isOnline;
 

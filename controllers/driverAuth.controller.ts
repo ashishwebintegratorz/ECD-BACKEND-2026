@@ -29,6 +29,9 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
   // Check if driver already exists
   const existingDriver = await UserModel.findOne({ phone, role: "driver" });
   if (existingDriver) {
+    if (existingDriver.status === "suspended") {
+      throw new UnauthorizedException("Your account is suspended. You have to connect to admin.");
+    }
     return res.json({
       exists: true,
       message: "Driver account already exists. Please login with PIN.",
@@ -59,25 +62,45 @@ export const verifyOtpController = asyncHandler(
       throw new BadRequestException(verification.reason || "Invalid OTP");
     }
 
-    if (!pin) {
-      throw new BadRequestException("4-digit PIN is required for driver accounts");
+    let user = await UserModel.findOne({ phone, role: "driver" });
+    
+    if (user) {
+      // Existing driver - regular login
+      await clearAccountLockout(user);
+
+      const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+      const userAgent = req.headers["user-agent"];
+      const auth = await createAuthTokensWithDb(user, ip, userAgent);
+
+      return res.json({
+        token: auth.accessToken,
+        refreshToken: auth.refreshToken,
+        user: auth.user,
+      });
+    } else {
+      // New driver - onboarding phase. Do NOT save to DB yet.
+      const { signAccessJwt } = await import("../utils/jwt.js");
+      const tempId = "temp_" + Date.now();
+      
+      const tempToken = signAccessJwt({
+        sub: tempId,
+        phone: phone,
+        role: "driver",
+        onboarding: true
+      });
+
+      return res.json({
+        token: tempToken,
+        refreshToken: "", 
+        user: {
+          _id: tempId,
+          phone: phone,
+          name: name || "",
+          role: "driver",
+          isVerified: true
+        }
+      });
     }
-
-    const user = await findOrCreateUserByPhone(phone, "driver", name);
-    await setUserPin(user, pin);
-
-    // Reset lockout counter on successful verification
-    await clearAccountLockout(user);
-
-    const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
-    const userAgent = req.headers["user-agent"];
-    const auth = await createAuthTokensWithDb(user, ip, userAgent);
-
-    return res.json({
-      token: auth.accessToken,
-      refreshToken: auth.refreshToken,
-      user: auth.user,
-    });
   }
 );
 
@@ -93,7 +116,7 @@ export const loginWithPin = asyncHandler(
     if (!user) throw new NotFoundException("Driver not found");
 
     if (user.status === "suspended") {
-      throw new UnauthorizedException("Your account has been blocked. Please contact admin.");
+      throw new UnauthorizedException("Your account is suspended. You have to connect to admin.");
     }
 
     // 1. Check if driver account is currently locked

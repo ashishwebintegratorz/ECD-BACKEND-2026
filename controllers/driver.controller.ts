@@ -156,14 +156,37 @@ export const updateDriverProfile = asyncHandler(async (req: Request, res: Respon
         console.log("FIRST FILE:", (req.files as any)[0]);
     }
 
-    const user = (req as any).user;
-    const { name, email, upi } = req.body;
+    let user = (req as any).user;
+    const { name, email, upi, pin } = req.body;
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+    let isNewUser = false;
+    if (user.onboarding) {
+        const dbUser = new UserModel({
+            phone: user.phone || req.body.phone,
+            role: "driver",
+            isVerified: true,
+            name: name || ""
+        });
+        await dbUser.save();
+        user._id = dbUser._id;
+        isNewUser = true;
+    } else {
+        const dbUser = await UserModel.findById(user._id);
+        if (!dbUser) {
+            return res.status(404).json({ success: false, message: "Driver not found in database." });
+        }
+    }
 
     const updateData: any = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
     if (upi) updateData.upi = upi;
+    if (pin) {
+        const bcrypt = await import("bcrypt");
+        const salt = await bcrypt.genSalt(10);
+        updateData.pinHash = await bcrypt.hash(pin, salt);
+    }
 
     if (files) {
         if (!updateData.documents) updateData.documents = {};
@@ -217,7 +240,27 @@ export const updateDriverProfile = asyncHandler(async (req: Request, res: Respon
         { new: true }
     ).select("-pinHash");
 
-    return res.json({ message: "Profile updated successfully", user: updatedDriver });
+    if (!updatedDriver) {
+        return res.status(404).json({ success: false, message: "Driver not found" });
+    }
+
+    if (isNewUser) {
+        const { createAuthTokensWithDb } = await import("../services/auth.service.js");
+        const ip = (req.headers["x-forwarded-for"] as string || req.ip || "unknown-ip").split(",")[0].trim();
+        const userAgent = req.headers["user-agent"];
+        
+        const auth = await createAuthTokensWithDb(updatedDriver as any, ip, userAgent);
+        
+        return res.json({ 
+            success: true,
+            message: "Profile updated successfully", 
+            user: auth.user,
+            token: auth.accessToken,
+            refreshToken: auth.refreshToken
+        });
+    }
+
+    return res.json({ success: true, message: "Profile updated successfully", user: updatedDriver });
 });
 
 /**
