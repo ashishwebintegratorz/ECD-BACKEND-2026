@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import axios from "axios";
 import OtpModel from "../models/Otp.model.js";
 import { config } from "../config/app.config.js";
@@ -11,20 +12,11 @@ const OTP_TTL_MINUTES = Number(
 );
 
 function generateOtpCode(): string {
-
   const min = 10 ** (OTP_LENGTH - 1);
-
-  const max = 10 ** OTP_LENGTH - 1;
-
-  return String(
-
-    Math.floor(
-      Math.random() * (max - min + 1)
-    ) + min
-
-  );
-
+  const max = 10 ** OTP_LENGTH;
+  return String(crypto.randomInt(min, max));
 }
+
 
 export async function createAndSendOtp(
   phone: string,

@@ -79,18 +79,22 @@ export const confirmOrderLogic = async (orderId: string) => {
 
     // 2. Decrement product stock atomically — prevents overselling race condition
     for (const item of order.items) {
-        if (item.variantIndex !== undefined) {
-            const updated = await Product.findOneAndUpdate(
-                {
-                    _id: item.product,
-                    [`variants.${item.variantIndex}.stock`]: { $gte: item.qty },
-                },
-                {
-                    $inc: { [`variants.${item.variantIndex}.stock`]: -item.qty },
+        if (item.variantIndex !== undefined && item.variantIndex !== null) {
+            const vIdx = Number(item.variantIndex);
+            if (Number.isInteger(vIdx) && vIdx >= 0) {
+                const stockField = `variants.${vIdx}.stock`;
+                const updated = await Product.findOneAndUpdate(
+                    {
+                        _id: item.product,
+                        [stockField]: { $gte: item.qty },
+                    },
+                    {
+                        $inc: { [stockField]: -item.qty },
+                    }
+                );
+                if (!updated) {
+                    console.warn(`[ECD KART] Stock insufficient for product ${item.product} — order ${orderId}`);
                 }
-            );
-            if (!updated) {
-                console.warn(`[ECD KART] Stock insufficient for product ${item.product} — order ${orderId}`);
             }
         }
     }

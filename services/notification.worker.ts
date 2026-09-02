@@ -75,17 +75,17 @@ export const registerNotificationWorker = () => {
 
                     if (staleTokens.length > 0) {
                         await Device.deleteMany({ user: job.userId, fcmToken: { $in: staleTokens } });
-                        console.log(`[ECD Queue] Removed ${staleTokens.length} stale token(s) for user ${job.userId}`);
+                        console.log(`[ECD Queue] Removed ${staleTokens.length} stale token(s)`);
                     }
 
                     // Check if it was entirely a failure (no successful sends)
                     // If at least one succeeded, we consider the job a success
                     if (response.successCount > 0) {
                         job.status = "success";
-                        console.log(`[ECD Queue] Sent "${job.title}" to user ${job.userId}`);
+                        console.log(`[ECD Queue] Sent notification job ${job._id}`);
                     } else {
                         // All tokens failed but maybe not stale (e.g. timeout)
-                        throw new Error("All tokens failed to send. " + JSON.stringify(response.responses));
+                        throw new Error("All tokens failed to send.");
                     }
                 } catch (err: any) {
                     console.error(`[ECD Queue] Failed to process job ${job._id}:`, err.message);
