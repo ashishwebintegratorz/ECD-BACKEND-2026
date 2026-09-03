@@ -217,3 +217,12 @@ export function emitAccountSuspended(userId: string, role: string) {
     io.to(`restaurant_${userId}`).emit("accountSuspended", { reason: "Admin is suspended you. You can connect to admin." });
   }
 }
+
+// Broadcast real-time notifications to all active admin clients
+export function emitAdminNotification(notificationDoc: any) {
+  if (!io) return;
+  io.to("admins").emit("adminNotification", notificationDoc);
+  // Also broadcast on general channel in case admin hasn't joined room yet
+  io.emit("adminNotificationReceived", notificationDoc);
+}
+

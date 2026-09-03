@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import Review from "../models/Review.model.js";
 import Restaurant from "../models/Restaurant.model.js";
 import Order from "../models/Order.model.js";
+import { createAndEmitAdminNotification } from "../services/adminNotification.service.js";
 
 // Create review
 export const createReview = async (req: Request, res: Response ) => {
@@ -15,6 +16,20 @@ export const createReview = async (req: Request, res: Response ) => {
         rating,
         comment,
         isHidden: false,
+    });
+
+    // Notify Admin Panel
+    createAndEmitAdminNotification({
+        title: "New Review Submitted",
+        body: `Customer submitted a ${rating}⭐ rating: "${(comment || "No comment").substring(0, 50)}"`,
+        category: "review",
+        data: {
+            reviewId: review._id.toString(),
+            rating,
+            type,
+            orderId,
+            linkUrl: "/reviews",
+        },
     });
 
     res.status(201).json({

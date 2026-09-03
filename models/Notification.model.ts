@@ -2,6 +2,7 @@ import { Schema, model, Document, Types } from "mongoose";
 
 export interface INotification extends Document {
   user?: Types.ObjectId;
+  forAdmin?: boolean;
   title: string;
   body: string;
   type?: string;
@@ -14,9 +15,10 @@ export interface INotification extends Document {
 const NotificationSchema = new Schema<INotification>(
   {
     user: { type: Schema.Types.ObjectId, ref: "User", index: true },
+    forAdmin: { type: Boolean, default: false, index: true },
     title: { type: String, required: true },
     body: { type: String, required: true },
-    type: { type: String },
+    type: { type: String, default: "general" },
     data: { type: Schema.Types.Mixed },
     read: { type: Boolean, default: false },
   },

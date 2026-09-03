@@ -9,6 +9,7 @@ import { Types } from "mongoose";
 import { createAndSendOtp, verifyOtp } from "../services/otp.service.js";
 import Notification from "../models/Notification.model.js";
 import { emitRestaurantStatusUpdate, emitAccountSuspended } from "../socket/orderSocket.js";
+import { createAndEmitAdminNotification } from "../services/adminNotification.service.js";
 import UserModel from "../models/User.model.js";
 import { signAccessJwt } from "../utils/jwt.js";
 
@@ -713,7 +714,7 @@ export const getRestaurantProfile = async (req: Request, res: Response) => {
             coverImage: restaurant.coverImage,
             restaurantKey: restaurant.restaurantKey,
             isActive: restaurant.isActive,
-            menu: restaurant.menu,
+            menu: (restaurant.menu || []).filter((m: any) => m.approvalStatus !== "deleted"),
         },
         totalOrders,
         totalRevenue,
@@ -903,7 +904,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
 export const vendorAddMenuItem = async (req: Request, res: Response) => {
     try {
         const restaurantId = req.params.restaurantId as string;
-        const { name, description, b2bPrice, image, foodType } = req.body;
+        const { name, description, image, foodType } = req.body;
 
         const restaurant = await Restaurant.findOne({
             $or: [
@@ -915,11 +916,15 @@ export const vendorAddMenuItem = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, message: "Restaurant not found" });
         }
 
+        // Support b2bPrice, b2b_price, or price sent from restaurant app
+        const rawB2B = req.body.b2bPrice !== undefined ? req.body.b2bPrice : (req.body.price !== undefined ? req.body.price : req.body.b2b_price);
+        const parsedB2B = Number(rawB2B) || 0;
+
         const newItem = {
             name,
             description,
             price: 0, // Admin sets this later
-            b2bPrice: Number(b2bPrice) || 0,
+            b2bPrice: parsedB2B,
             image,
             foodType,
             isAvailable: false, // Default not available until approved
@@ -929,11 +934,17 @@ export const vendorAddMenuItem = async (req: Request, res: Response) => {
         restaurant.menu.push(newItem);
         await restaurant.save();
 
-        // Create a notification for admin
-        await Notification.create({
+        // Broadcast real-time notification to admin panel
+        await createAndEmitAdminNotification({
             title: "New Menu Item Pending Approval",
             body: `Restaurant ${restaurant.name} added "${name}". Please review and set the selling price.`,
-            type: "admin"
+            category: "menu_approval",
+            data: {
+                restaurantId: restaurant._id.toString(),
+                itemName: name,
+                b2bPrice: parsedB2B,
+                linkUrl: "/restaurants/approvals",
+            }
         });
 
         return res.status(201).json({
@@ -996,23 +1007,35 @@ export const adminApproveMenuItem = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, message: "Restaurant not found" });
         }
 
-        const menuItem = restaurant.menu.find(m => (m as any)._id.toString() === itemId) as any;
-        if (!menuItem) {
+        const menuItemIndex = restaurant.menu.findIndex(m => (m as any)._id.toString() === itemId);
+        if (menuItemIndex === -1) {
             return res.status(404).json({ success: false, message: "Menu item not found" });
         }
 
+        const menuItem = restaurant.menu[menuItemIndex] as any;
+
+        if (approvalStatus === "deleted") {
+            // Delete menu item completely from the restaurant's menu
+            restaurant.menu.splice(menuItemIndex, 1);
+            await restaurant.save();
+
+            return res.json({
+                success: true,
+                message: "Menu item deleted successfully",
+                menu: restaurant.menu
+            });
+        }
+
         if (approvalStatus) {
-            if (approvalStatus === "deleted") {
-                menuItem.approvalStatus = "deleted";
+            menuItem.approvalStatus = approvalStatus;
+            if (approvalStatus === "approved") {
+                menuItem.isAvailable = true;
+                menuItem.deleteReason = undefined;
+            } else if (approvalStatus === "rejected") {
                 menuItem.isAvailable = false;
-            } else {
-                menuItem.approvalStatus = approvalStatus;
-                if (approvalStatus === "approved") {
-                    menuItem.isAvailable = true;
-                }
             }
         }
-        if (price !== undefined) {
+        if (price !== undefined && price !== null) {
             menuItem.price = Number(price);
         }
 
@@ -1086,6 +1109,20 @@ export const vendorRequestDeleteMenuItem = async (req: Request, res: Response) =
         
         await restaurant.save();
 
+        // Broadcast real-time notification to admin panel
+        await createAndEmitAdminNotification({
+            title: "Menu Item Deletion Request",
+            body: `Restaurant ${restaurant.name} requested deletion of "${menuItem.name}": "${reason || "No reason provided"}"`,
+            category: "menu_approval",
+            data: {
+                restaurantId: restaurant._id.toString(),
+                itemId: menuItem._id.toString(),
+                itemName: menuItem.name,
+                reason,
+                linkUrl: "/restaurants/approvals",
+            }
+        });
+
         return res.json({
             success: true,
             message: "Deletion request submitted",
@@ -1099,13 +1136,13 @@ export const vendorRequestDeleteMenuItem = async (req: Request, res: Response) =
 export const getPastMenuApprovals = async (req: Request, res: Response) => {
     try {
         const restaurants = await Restaurant.find({ 
-            "menu.approvalStatus": { $in: ["approved", "rejected", "deleted"] }
+            "menu.approvalStatus": { $in: ["approved", "rejected"] }
         });
         const pastItems: any[] = [];
         
         restaurants.forEach(rest => {
             rest.menu.forEach(item => {
-                if (["approved", "rejected", "deleted"].includes((item as any).approvalStatus)) {
+                if (["approved", "rejected"].includes((item as any).approvalStatus)) {
                     pastItems.push({
                         restaurantId: rest._id,
                         restaurantName: rest.name,

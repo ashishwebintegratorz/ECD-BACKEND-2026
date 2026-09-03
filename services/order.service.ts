@@ -6,6 +6,7 @@ import Ledger from "../models/Ledger.model.js";
 import PaymentTransaction from "../models/PaymentTransaction.model.js";
 import Restaurant from "../models/Restaurant.model.js";
 import { emitNewOrderToRestaurant } from "../socket/orderSocket.js";
+import { createAndEmitAdminNotification } from "./adminNotification.service.js";
 import { incrementCouponUsage } from "./coupon.service.js";
 import { config } from "../config/app.config.js";
 
@@ -187,6 +188,20 @@ export const confirmOrderLogic = async (orderId: string) => {
             message: "New order — start processing now",
         });
     }
+
+    // 8. Notify Admin Panel
+    createAndEmitAdminNotification({
+        title: "New Order Placed",
+        body: `Order #${order.orderNumber} received for ₹${order.totalAmount}`,
+        category: "order",
+        data: {
+            orderId: order._id.toString(),
+            orderNumber: order.orderNumber,
+            totalAmount: order.totalAmount,
+            store: order.store?.toString(),
+            linkUrl: "/live-orders",
+        },
+    });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

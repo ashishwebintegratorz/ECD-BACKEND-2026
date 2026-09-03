@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import Issue from "../models/Issue.model.js";
 import Order from "../models/Order.model.js";
+import { createAndEmitAdminNotification } from "../services/adminNotification.service.js";
 
 export const reportIssue = async (req: Request, res: Response) => {
   try {
@@ -34,6 +35,19 @@ export const reportIssue = async (req: Request, res: Response) => {
     });
 
     await issue.save();
+
+    // Notify Admin Panel
+    createAndEmitAdminNotification({
+      title: "New Support Ticket",
+      body: `Customer reported an issue for Order #${order.orderNumber}: "${description.substring(0, 60)}${description.length > 60 ? "..." : ""}"`,
+      category: "issue",
+      data: {
+        issueId: issue._id.toString(),
+        orderId: orderId.toString(),
+        orderNumber: order.orderNumber,
+        linkUrl: "/issues",
+      },
+    });
 
     return res.status(201).json({
       success: true,

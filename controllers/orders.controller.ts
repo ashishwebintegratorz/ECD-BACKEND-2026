@@ -19,6 +19,7 @@ import {
   notifyRefundInitiated,
 } from "../services/notification.service.js";
 import User from "../models/User.model.js";
+import { createAndEmitAdminNotification } from "../services/adminNotification.service.js";
 import {
   emitOrderStatusUpdate,
   emitNewOrderToRestaurant,
@@ -610,6 +611,19 @@ export const cancelOrder = async (req: Request, res: Response) => {
 
   // Push: notify customer of cancellation
   notifyOrderCancelled(userId, order.orderNumber).catch(() => { });
+  
+  createAndEmitAdminNotification({
+    title: "Order Cancelled",
+    body: `Order #${order.orderNumber} was cancelled by ${order.cancelledBy || "customer"}: ${cancelReason}`,
+    category: "order",
+    data: {
+      orderId: order._id.toString(),
+      orderNumber: order.orderNumber,
+      status: "cancelled",
+      linkUrl: "/orders",
+    },
+  });
+
   emitOrderStatusUpdate(orderId, {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
@@ -846,6 +860,18 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
   }
   if (status === "delivered") {
     notifyOrderDelivered(order.customer.toString(), order.orderNumber).catch(() => { });
+    createAndEmitAdminNotification({
+      title: "Order Delivered",
+      body: `Order #${order.orderNumber} successfully delivered by rider`,
+      category: "order",
+      data: {
+        orderId: order._id.toString(),
+        orderNumber: order.orderNumber,
+        status: "delivered",
+        driverId,
+        linkUrl: "/live-orders",
+      },
+    });
   }
 
   // Update driver performance metrics
@@ -1345,6 +1371,19 @@ export const restaurantVerifyPickup = async (req: Request, res: Response) => {
       await restaurant.save();
   }
 
+  createAndEmitAdminNotification({
+    title: "Order Picked Up",
+    body: `Order #${order.orderNumber} picked up by rider ${(order.assignedDriver as any)?.name || ""}`,
+    category: "order",
+    data: {
+      orderId: order._id.toString(),
+      orderNumber: order.orderNumber,
+      status: "picked_up",
+      driverName: (order.assignedDriver as any)?.name || "Rider",
+      linkUrl: "/live-orders",
+    },
+  });
+
   emitOrderStatusUpdate(orderId, {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
@@ -1385,6 +1424,18 @@ export const restaurantCompletePickup = async (req: Request, res: Response) => {
       restaurant.walletBalance = (restaurant.walletBalance || 0) + order.payableAmount;
       await restaurant.save();
   }
+
+  createAndEmitAdminNotification({
+    title: "Self-Pickup Completed",
+    body: `Self-pickup order #${order.orderNumber} collected by customer`,
+    category: "order",
+    data: {
+      orderId: order._id.toString(),
+      orderNumber: order.orderNumber,
+      status: "delivered",
+      linkUrl: "/live-orders",
+    },
+  });
 
   emitOrderStatusUpdate(orderId, {
     status: order.status,

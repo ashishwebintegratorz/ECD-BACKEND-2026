@@ -4,6 +4,7 @@ import User from "../models/User.model.js";
 import WithdrawalRequest from "../models/WithdrawalRequest.model.js";
 import { BadRequestException } from "../utils/appError.js";
 import { sendPushToUser } from "../services/notification.service.js";
+import { createAndEmitAdminNotification } from "../services/adminNotification.service.js";
 
 /**
  * GET: Rider wallet balance and recent withdrawal requests
@@ -56,9 +57,19 @@ export const requestWithdrawal = asyncHandler(async (req: Request, res: Response
         status: "pending"
     });
 
-    // Optionally deduct balance immediately or wait for approval
-    // Here we wait for approval before deducting to avoid issues if rejected
-    
+    // Notify Admin Panel
+    createAndEmitAdminNotification({
+        title: "New Withdrawal Request",
+        body: `Rider ${driver.name || driver.phone} requested withdrawal of ₹${amount}`,
+        category: "withdrawal",
+        data: {
+            withdrawalId: withdrawal._id.toString(),
+            driverId: driverId.toString(),
+            amount,
+            linkUrl: "/riders/withdrawals",
+        },
+    });
+
     return res.json({ message: "Withdrawal request submitted successfully", withdrawal });
 });
 

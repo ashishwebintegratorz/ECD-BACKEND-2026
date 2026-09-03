@@ -77,13 +77,13 @@ router.post("/send-otp", asyncHandler(restaurantSendOtp));
 router.post("/verify-otp", asyncHandler(restaurantVerifyOtp));
 
 // GET /api/restaurants/:restaurantId/profile
-router.get("/:restaurantId/profile", jwtAuth, requireRole("admin", "restaurant"), validateObjectId("restaurantId"), requireRestaurantAccess, asyncHandler(getRestaurantProfile));
+router.get("/:restaurantId/profile", jwtAuth, requireRole("admin", "restaurant"), requireRestaurantAccess, asyncHandler(getRestaurantProfile));
 
 // GET /api/restaurants/:restaurantId/order-history
-router.get("/:restaurantId/order-history", jwtAuth, requireRole("admin", "restaurant"), validateObjectId("restaurantId"), requireRestaurantAccess, asyncHandler(getRestaurantOrderHistory));
+router.get("/:restaurantId/order-history", jwtAuth, requireRole("admin", "restaurant"), requireRestaurantAccess, asyncHandler(getRestaurantOrderHistory));
 
 // GET /api/restaurants/:restaurantId/dashboard-stats
-router.get("/:restaurantId/dashboard-stats", jwtAuth, requireRole("admin", "restaurant"), validateObjectId("restaurantId"), requireRestaurantAccess, asyncHandler(getDashboardStats));
+router.get("/:restaurantId/dashboard-stats", jwtAuth, requireRole("admin", "restaurant"), requireRestaurantAccess, asyncHandler(getDashboardStats));
 
 // POST /api/restaurants/:restaurantId/payout
 router.post("/:restaurantId/payout", jwtAuth, requireRole("admin"), validateObjectId("restaurantId"), asyncHandler(payoutRestaurant));
@@ -93,7 +93,6 @@ router.patch(
     "/:restaurantId/toggle-active",
     jwtAuth,
     requireRole("admin", "restaurant"),
-    validateObjectId("restaurantId"),
     requireRestaurantAccess,
     asyncHandler(toggleRestaurantActive)
 );
@@ -174,7 +173,6 @@ router.post(
     "/vendor/menu/add/:restaurantId",
     jwtAuth,
     requireRole("admin", "restaurant"),
-    validateObjectId("restaurantId"),
     requireRestaurantAccess,
     asyncHandler(vendorAddMenuItem)
 );
@@ -184,13 +182,13 @@ router.patch(
     "/vendor/menu/toggle/:restaurantId/:itemId",
     jwtAuth,
     requireRole("admin", "restaurant"),
-    validateObjectId("restaurantId", "itemId"),
+    validateObjectId("itemId"),
     requireRestaurantAccess,
     asyncHandler(vendorToggleMenuItem)
 );
 
 // ADMIN: PATCH /api/restaurants/admin/menu/approve/:restaurantId/:itemId
-router.patch("/admin/menu/approve/:restaurantId/:itemId", jwtAuth, requireRole("admin"), validateObjectId("restaurantId", "itemId"), asyncHandler(adminApproveMenuItem));
+router.patch("/admin/menu/approve/:restaurantId/:itemId", jwtAuth, requireRole("admin"), validateObjectId("itemId"), asyncHandler(adminApproveMenuItem));
 
 // GET /api/restaurants/admin/menu/pending
 router.get(
@@ -209,7 +207,7 @@ router.get(
 );
 
 // DELETE /api/restaurants/:restaurantId/menu/:itemId/request-delete
-router.delete("/:restaurantId/menu/:itemId/request-delete", jwtAuth, requireRole("admin", "restaurant"), validateObjectId("restaurantId", "itemId"), requireRestaurantAccess, asyncHandler(vendorRequestDeleteMenuItem));
+router.delete("/:restaurantId/menu/:itemId/request-delete", jwtAuth, requireRole("admin", "restaurant"), validateObjectId("itemId"), requireRestaurantAccess, asyncHandler(vendorRequestDeleteMenuItem));
 
 // DELETE /api/restaurants/vendor/delete-account
 router.delete("/vendor/delete-account", jwtAuth, requireRole("restaurant" as any, "admin"), asyncHandler(vendorDeleteAccount));
