@@ -107,3 +107,20 @@ export const updateIssueStatus = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
+export const getMyIssues = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?._id;
+    const issues = await Issue.find({ user: userId })
+      .populate("order", "orderNumber totalAmount items status")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      issues,
+    });
+  } catch (error) {
+    console.error("Error fetching user issues:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

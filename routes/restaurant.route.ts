@@ -62,6 +62,7 @@ router.get("/by-category/:slug", asyncHandler(getRestaurantsByCategory));
 
 // GET /api/restaurants/details/:slug
 router.get("/details/:slug", asyncHandler(getRestaurantBySlug));
+router.get("/slug/:slug", asyncHandler(getRestaurantBySlug));
 
 // GET /api/restaurants/menu/:slug?foodType=veg|non-veg|vegan
 router.get("/menu/:slug", asyncHandler(getRestaurantMenu));

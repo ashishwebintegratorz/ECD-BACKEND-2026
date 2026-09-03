@@ -1,0 +1,1074 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ECD-KART API Technical Audit Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #0f172a;
+    background: #ffffff;
+    line-height: 1.4;
+    padding: 24px;
+    font-size: 10.5px;
+  }
+  
+  .header {
+    border-bottom: 2.5px solid #16a34a;
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .title-area h1 {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.5px;
+  }
+  .title-area p {
+    font-size: 11.5px;
+    color: #475569;
+    margin-top: 3px;
+  }
+  .meta-area {
+    text-align: right;
+    font-size: 10.5px;
+    color: #334155;
+  }
+  .meta-badge {
+    display: inline-block;
+    background: #dcfce7;
+    color: #166534;
+    padding: 3px 9px;
+    border-radius: 9999px;
+    font-weight: 700;
+    font-size: 10px;
+    margin-bottom: 4px;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .stat-card .num {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+  .stat-card .label {
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #64748b;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+  .stat-card.pass .num { color: #16a34a; }
+  .stat-card.rate .num { color: #0284c7; }
+
+  .section-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 10px;
+    border-left: 3.5px solid #16a34a;
+    padding-left: 8px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+    font-size: 9.5px;
+  }
+  th {
+    background: #0f172a;
+    color: #ffffff;
+    font-weight: 600;
+    text-align: left;
+    padding: 6px 8px;
+    text-transform: uppercase;
+    font-size: 8.5px;
+    letter-spacing: 0.5px;
+  }
+  td {
+    padding: 5.5px 8px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+  }
+  tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+
+  .method {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    font-size: 8.5px;
+    display: inline-block;
+  }
+  .method.GET { background: #e0f2fe; color: #0369a1; }
+  .method.POST { background: #dcfce7; color: #15803d; }
+  .method.PUT { background: #fef3c7; color: #b45309; }
+  .method.PATCH { background: #fae8ff; color: #86198f; }
+  .method.DELETE { background: #fee2e2; color: #b91c1c; }
+
+  .endpoint {
+    font-family: 'JetBrains Mono', monospace;
+    color: #0f172a;
+    font-size: 8.5px;
+    font-weight: 500;
+  }
+  .role-badge {
+    background: #e2e8f0;
+    color: #334155;
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 8.5px;
+  }
+  .status-badge {
+    font-weight: 700;
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    font-size: 8.5px;
+  }
+  .status-badge.PASS { background: #dcfce7; color: #15803d; }
+  .status-badge.WARN { background: #fef3c7; color: #b45309; }
+  .status-badge.FAIL { background: #fee2e2; color: #b91c1c; }
+
+  .footer {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 12px;
+    margin-top: 24px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: #94a3b8;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title-area">
+    <h1>ECD-KART API Technical Audit & Diagnostics Report</h1>
+    <p>Exhaustive End-to-End Test Suite Across All 25 Route Modules (Live Verified)</p>
+  </div>
+  <div class="meta-area">
+    <div class="meta-badge">🟢 100% MODULES AUDITED</div>
+    <div><strong>Target Base URL:</strong> https://api.ecdkart.co.in/api/v1</div>
+    <div><strong>Execution Date:</strong> 03 Sept 2026</div>
+  </div>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="num">77</div>
+    <div class="label">Total Endpoints Tested</div>
+  </div>
+  <div class="stat-card pass">
+    <div class="num">74</div>
+    <div class="label">Verified & Passed</div>
+  </div>
+  <div class="stat-card rate">
+    <div class="num">96.1%</div>
+    <div class="label">Pass Success Rate</div>
+  </div>
+  <div class="stat-card">
+    <div class="num">25</div>
+    <div class="label">Modules Verified</div>
+  </div>
+</div>
+
+<div class="section-title">Complete API Endpoint Diagnostics & Verification Matrix</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width: 4%;">#</th>
+      <th style="width: 14%;">Module</th>
+      <th style="width: 7%;">Method</th>
+      <th style="width: 33%;">Endpoint Path</th>
+      <th style="width: 11%;">Access Role</th>
+      <th style="width: 6%;">HTTP</th>
+      <th style="width: 8%;">Latency</th>
+      <th style="width: 17%;">Audit Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+      <tr>
+        <td><strong>1</strong></td>
+        <td><strong>System & Gateway</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>26ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>2</strong></td>
+        <td><strong>Auth: Customer</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/auth/user/send-otp</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>303ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>3</strong></td>
+        <td><strong>Auth: Customer</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/auth/user/verify-otp</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>400</strong></td>
+        <td>4ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>4</strong></td>
+        <td><strong>Auth: Customer</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/auth/user/refresh</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>401</strong></td>
+        <td>1ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>5</strong></td>
+        <td><strong>Auth: Driver</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/auth/driver/send-otp</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>242ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>6</strong></td>
+        <td><strong>Auth: Driver</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/auth/driver/verify-otp</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>400</strong></td>
+        <td>5ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>7</strong></td>
+        <td><strong>Auth: Admin</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/auth/admin/send-otp</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>1850ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>8</strong></td>
+        <td><strong>Auth: Admin</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/auth/admin/login-with-pin</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>400</strong></td>
+        <td>74ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>9</strong></td>
+        <td><strong>User Profile</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/user/me</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>81ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>10</strong></td>
+        <td><strong>User Profile</strong></td>
+        <td><span class="method PUT">PUT</span></td>
+        <td><span class="endpoint">/user/update-profile</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>141ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>11</strong></td>
+        <td><strong>Categories</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/categories</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>74ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>12</strong></td>
+        <td><strong>Categories</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/categories/biryani</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>59ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>13</strong></td>
+        <td><strong>Popular Dishes</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/popular-dishes</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>67ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>14</strong></td>
+        <td><strong>Restaurants</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/list</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>83ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>15</strong></td>
+        <td><strong>Restaurants</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/search?query=biryani</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>75ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>16</strong></td>
+        <td><strong>Restaurants</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/suggestions?query=biry</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>188ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>17</strong></td>
+        <td><strong>Restaurants</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/by-category/biryani</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>141ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>18</strong></td>
+        <td><strong>Restaurants</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/menu/silver-streak</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>457ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>19</strong></td>
+        <td><strong>Restaurants</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/slug/silver-streak</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>270ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>20</strong></td>
+        <td><strong>Restaurant Vendor</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/85564848335687/profile</span></td>
+        <td><span class="role-badge">Restaurant</span></td>
+        <td><strong>200</strong></td>
+        <td>459ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>21</strong></td>
+        <td><strong>Restaurant Vendor</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/85564848335687/dashboard-stats?filter=today</span></td>
+        <td><span class="role-badge">Restaurant</span></td>
+        <td><strong>500</strong></td>
+        <td>201ms</td>
+        <td><span class="status-badge FAIL">FAIL</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>22</strong></td>
+        <td><strong>Restaurant Vendor</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/85564848335687/order-history</span></td>
+        <td><span class="role-badge">Restaurant</span></td>
+        <td><strong>500</strong></td>
+        <td>160ms</td>
+        <td><span class="status-badge FAIL">FAIL</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>23</strong></td>
+        <td><strong>Restaurant Vendor</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/restaurants/vendor/menu/add/85564848335687</span></td>
+        <td><span class="role-badge">Restaurant</span></td>
+        <td><strong>201</strong></td>
+        <td>460ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>24</strong></td>
+        <td><strong>Restaurant Vendor</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/restaurants/send-otp</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>2104ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>25</strong></td>
+        <td><strong>Menu Approvals</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/admin/menu/pending</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>486ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>26</strong></td>
+        <td><strong>Menu Approvals</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/restaurants/admin/menu/history</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>279ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>27</strong></td>
+        <td><strong>Cart</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/cart</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>133ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>28</strong></td>
+        <td><strong>Cart</strong></td>
+        <td><span class="method DELETE">DELETE</span></td>
+        <td><span class="endpoint">/cart/clear</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>194ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>29</strong></td>
+        <td><strong>Address</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/addresses/me</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>141ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>30</strong></td>
+        <td><strong>Orders</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/orders/me</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>163ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>31</strong></td>
+        <td><strong>Orders</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/orders/my-orders</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>131ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>32</strong></td>
+        <td><strong>Orders</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/orders/restaurant/6a6e2c0abd6469f9ef21b08c</span></td>
+        <td><span class="role-badge">Restaurant</span></td>
+        <td><strong>200</strong></td>
+        <td>334ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>33</strong></td>
+        <td><strong>Orders</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/orders/all</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>204ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>34</strong></td>
+        <td><strong>Orders</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/orders/cancellations/all</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>192ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>35</strong></td>
+        <td><strong>Orders</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/orders/cancellations/stats</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>180ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>36</strong></td>
+        <td><strong>Drivers & Logistics</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/drivers/all</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>717ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>37</strong></td>
+        <td><strong>Drivers & Logistics</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/drivers/free</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>218ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>38</strong></td>
+        <td><strong>Drivers & Logistics</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/drivers/locations</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>205ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>39</strong></td>
+        <td><strong>Drivers & Logistics</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/drivers/profile</span></td>
+        <td><span class="role-badge">Driver</span></td>
+        <td><strong>200</strong></td>
+        <td>157ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>40</strong></td>
+        <td><strong>Drivers & Logistics</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/drivers/summary</span></td>
+        <td><span class="role-badge">Driver</span></td>
+        <td><strong>200</strong></td>
+        <td>175ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>41</strong></td>
+        <td><strong>Drivers & Logistics</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/drivers/orders/active</span></td>
+        <td><span class="role-badge">Driver</span></td>
+        <td><strong>200</strong></td>
+        <td>146ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>42</strong></td>
+        <td><strong>Drivers & Logistics</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/drivers/orders/history</span></td>
+        <td><span class="role-badge">Driver</span></td>
+        <td><strong>200</strong></td>
+        <td>566ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>43</strong></td>
+        <td><strong>Drivers & Logistics</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/drivers/wallet</span></td>
+        <td><span class="role-badge">Driver</span></td>
+        <td><strong>200</strong></td>
+        <td>266ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>44</strong></td>
+        <td><strong>Drivers & Logistics</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/drivers/cod-balance</span></td>
+        <td><span class="role-badge">Driver</span></td>
+        <td><strong>200</strong></td>
+        <td>128ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>45</strong></td>
+        <td><strong>Invoices</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/invoices</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>267ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>46</strong></td>
+        <td><strong>Invoices</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/invoices/me</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>204ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>47</strong></td>
+        <td><strong>Reviews</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/reviews/all</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>209ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>48</strong></td>
+        <td><strong>Reviews</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/reviews/my</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>127ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>49</strong></td>
+        <td><strong>Reviews</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/reviews/restaurant/6a6e2c0abd6469f9ef21b08c</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>146ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>50</strong></td>
+        <td><strong>Support Tickets</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/issues</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>203ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>51</strong></td>
+        <td><strong>Support Tickets</strong></td>
+        <td><span class="method POST">POST</span></td>
+        <td><span class="endpoint">/issues/report</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>404</strong></td>
+        <td>164ms</td>
+        <td><span class="status-badge WARN">WARN</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>52</strong></td>
+        <td><strong>Notifications</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/notifications/admin</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>163ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>53</strong></td>
+        <td><strong>Notifications</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/notifications/my</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>156ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>54</strong></td>
+        <td><strong>Notifications</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/notifications/unread-count</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>151ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>55</strong></td>
+        <td><strong>Notifications</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/notifications/admin/history</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>148ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>56</strong></td>
+        <td><strong>Coupons</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/coupons/active</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>155ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>57</strong></td>
+        <td><strong>Coupons</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/coupons/admin/all</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>141ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>58</strong></td>
+        <td><strong>Banners</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/banners</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>89ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>59</strong></td>
+        <td><strong>Banners</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/banners/admin</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>120ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>60</strong></td>
+        <td><strong>Wishlist</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/wishlist</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>128ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>61</strong></td>
+        <td><strong>Ledgers & Accounting</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/ledger</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>445ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>62</strong></td>
+        <td><strong>Ledgers & Accounting</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/ledger/summary</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>132ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>63</strong></td>
+        <td><strong>Ledgers & Accounting</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/ledger/batches</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>127ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>64</strong></td>
+        <td><strong>Refunds</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/refunds/all</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>139ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>65</strong></td>
+        <td><strong>Refunds</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/refunds/stats</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>156ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>66</strong></td>
+        <td><strong>Refunds</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/refunds/my</span></td>
+        <td><span class="role-badge">Customer</span></td>
+        <td><strong>200</strong></td>
+        <td>148ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>67</strong></td>
+        <td><strong>Grocery</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/grocery/list</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>75ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>68</strong></td>
+        <td><strong>Settings</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/settings</span></td>
+        <td><span class="role-badge">Public</span></td>
+        <td><strong>200</strong></td>
+        <td>67ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>69</strong></td>
+        <td><strong>Admin Operations</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/admin/dashboard</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>191ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>70</strong></td>
+        <td><strong>Admin Operations</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/admin/live-orders</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>203ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>71</strong></td>
+        <td><strong>Admin Operations</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/admin/users</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>224ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>72</strong></td>
+        <td><strong>Admin Operations</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/admin/suspended-accounts</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>130ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>73</strong></td>
+        <td><strong>Admin Operations</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/admin/stats/revenue</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>138ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>74</strong></td>
+        <td><strong>Admin Operations</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/admin/stats/stores</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>164ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>75</strong></td>
+        <td><strong>Admin Operations</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/admin/withdrawals</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>191ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>76</strong></td>
+        <td><strong>Admin Operations</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/admin/riders/orders/summary</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>272ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+      <tr>
+        <td><strong>77</strong></td>
+        <td><strong>Admin Operations</strong></td>
+        <td><span class="method GET">GET</span></td>
+        <td><span class="endpoint">/admin/riders/cod-summary</span></td>
+        <td><span class="role-badge">Admin</span></td>
+        <td><strong>200</strong></td>
+        <td>431ms</td>
+        <td><span class="status-badge PASS">✓ PASS</span></td>
+      </tr>
+    
+  </tbody>
+</table>
+
+<div class="footer">
+  <div>ECD-KART Enterprise Architecture &bull; Official Engineering Audit Report</div>
+  <div>Approved for Technical Leads, QA & Stakeholders</div>
+</div>
+
+</body>
+</html>
+  

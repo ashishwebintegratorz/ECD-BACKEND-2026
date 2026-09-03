@@ -17,12 +17,12 @@ export const requireRestaurantAccess = (
 
     const authenticatedRestaurantId = (user._id ?? user.id)?.toString();
     const customRestaurantId = user.restaurantId?.toString();
-    const targetRestaurantId = req.params.restaurantId;
+    const targetRestaurantId = req.params.restaurantId || req.params.id || req.params.restId;
 
     if (
         user.role !== "restaurant" ||
         (!authenticatedRestaurantId && !customRestaurantId) ||
-        (authenticatedRestaurantId !== targetRestaurantId && customRestaurantId !== targetRestaurantId)
+        (targetRestaurantId && authenticatedRestaurantId !== targetRestaurantId && customRestaurantId !== targetRestaurantId)
     ) {
         return next(
             new ForbiddenException(

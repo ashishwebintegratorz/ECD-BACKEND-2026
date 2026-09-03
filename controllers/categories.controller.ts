@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { Types } from "mongoose";
 import Category from "../models/Category.model.js";
 import { uploadToImageKit } from "../services/imagekit.service.js";
 import { BadRequestException, NotFoundException } from "../utils/appError.js";
@@ -63,10 +64,18 @@ export const getAllCategories = async (_req: Request, res: Response) => {
 };
 
 // ----------------------------
-// 3️⃣ Get Category By ID
+// 3️⃣ Get Category By ID or Slug
 // ----------------------------
 export const getCategoryById = async (req: Request, res: Response) => {
-  const category = await Category.findById(req.params.id);
+  const id = req.params.id as string;
+  let category = null;
+
+  if (Types.ObjectId.isValid(id)) {
+    category = await Category.findById(id);
+  }
+  if (!category) {
+    category = await Category.findOne({ slug: id.toLowerCase().trim() });
+  }
 
   if (!category) {
     throw new NotFoundException("Category not found");

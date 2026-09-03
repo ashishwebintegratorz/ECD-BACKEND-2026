@@ -22,3 +22,4 @@ const bannerSchema = new Schema<IBanner>(
 );
 
 export const BannerModel = mongoose.model<IBanner>("Banner", bannerSchema);
+export default BannerModel;
