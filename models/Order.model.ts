@@ -1,4 +1,4 @@
-import { Schema, model, Document, Types } from "mongoose";
+import mongoose, { Schema, model, Document, Types } from "mongoose";
 
 export type OrderStatus =
   | "pending"
@@ -151,4 +151,4 @@ OrderSchema.index({ status: 1, assignedDriver: 1 });
 OrderSchema.index({ deliveryStatus: 1, assignedDriver: 1 });
 OrderSchema.index({ cancelledBy: 1, createdAt: -1 }); // admin cancellation queries
 
-export default model<IOrder>("Order", OrderSchema);
+export default (mongoose.models.Order as mongoose.Model<IOrder>) || model<IOrder>("Order", OrderSchema);
