@@ -67,13 +67,13 @@ export const getRestaurants = async (req: Request, res: Response) => {
     const hasCoords = userLat !== null && userLng !== null;
 
     const dietary = req.query.dietary ? String(req.query.dietary) : undefined; // "Veg" or "Non-Veg"
-    
+
     const parseNum = (val: any) => val && !isNaN(Number(val)) ? Number(val) : null;
     const minPrice = parseNum(req.query.minPrice);
     const maxPrice = parseNum(req.query.maxPrice);
     const minRating = parseNum(req.query.minRating);
     const maxDistance = parseNum(req.query.maxDistance);
-    
+
     const status = req.query.status ? String(req.query.status) : undefined; // "Open Now" or "Closed"
 
     const filter: any = { isActive: true };
@@ -727,8 +727,19 @@ export const getRestaurantProfile = async (req: Request, res: Response) => {
 export const getRestaurantOrderHistory = async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
 
+    let restaurant = null;
+    if (typeof restaurantId === 'string' && restaurantId.match(/^[0-9a-fA-F]{24}$/)) {
+        restaurant = await Restaurant.findById(restaurantId);
+    }
+    if (!restaurant) {
+        restaurant = await Restaurant.findOne({ restaurantId: restaurantId });
+    }
+    if (!restaurant) {
+        return res.status(404).json({ message: "Restaurant not found" });
+    }
+
     const orders = await Order.find({
-        store: restaurantId,
+        store: restaurant._id,
         deliveryStatus: { $in: ["picked_up", "delivered"] },
     })
         .sort({ createdAt: -1 })
@@ -784,7 +795,7 @@ export const restaurantSendOtp = async (req: Request, res: Response) => {
 
     const searchPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
     const rawPhone = phone.startsWith('+91') ? phone.replace('+91', '') : phone;
-    const restaurant = await Restaurant.findOne({ 
+    const restaurant = await Restaurant.findOne({
         $or: [
             { phone: searchPhone },
             { phone: rawPhone }
@@ -817,7 +828,7 @@ export const restaurantVerifyOtp = async (req: Request, res: Response) => {
         return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
-    const restaurant = await Restaurant.findOne({ 
+    const restaurant = await Restaurant.findOne({
         $or: [
             { phone: searchPhone },
             { phone: rawPhone }
@@ -851,7 +862,13 @@ export const getDashboardStats = async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
     const filter = (req.query.filter as string) || "today";
 
-    const restaurant = await Restaurant.findById(restaurantId);
+    let restaurant = null;
+    if (typeof restaurantId === 'string' && restaurantId.match(/^[0-9a-fA-F]{24}$/)) {
+        restaurant = await Restaurant.findById(restaurantId);
+    }
+    if (!restaurant) {
+        restaurant = await Restaurant.findOne({ restaurantId: restaurantId });
+    }
     if (!restaurant) {
         return res.status(404).json({ message: "Restaurant not found" });
     }
@@ -1056,7 +1073,7 @@ export const getPendingMenuItems = async (req: Request, res: Response) => {
     try {
         const restaurants = await Restaurant.find({ "menu.approvalStatus": { $in: ["pending", "delete_pending"] } });
         const pendingItems: any[] = [];
-        
+
         restaurants.forEach(rest => {
             rest.menu.forEach(item => {
                 if (["pending", "delete_pending"].includes((item as any).approvalStatus)) {
@@ -1075,7 +1092,7 @@ export const getPendingMenuItems = async (req: Request, res: Response) => {
                 }
             });
         });
-        
+
         return res.json({ success: true, pendingItems });
     } catch (error: any) {
         return res.status(500).json({ success: false, message: error.message });
@@ -1106,7 +1123,7 @@ export const vendorRequestDeleteMenuItem = async (req: Request, res: Response) =
         menuItem.approvalStatus = "delete_pending";
         menuItem.isAvailable = false;
         menuItem.deleteReason = reason || "No reason provided";
-        
+
         await restaurant.save();
 
         // Broadcast real-time notification to admin panel
@@ -1135,11 +1152,11 @@ export const vendorRequestDeleteMenuItem = async (req: Request, res: Response) =
 
 export const getPastMenuApprovals = async (req: Request, res: Response) => {
     try {
-        const restaurants = await Restaurant.find({ 
+        const restaurants = await Restaurant.find({
             "menu.approvalStatus": { $in: ["approved", "rejected"] }
         });
         const pastItems: any[] = [];
-        
+
         restaurants.forEach(rest => {
             rest.menu.forEach(item => {
                 if (["approved", "rejected"].includes((item as any).approvalStatus)) {
@@ -1159,7 +1176,7 @@ export const getPastMenuApprovals = async (req: Request, res: Response) => {
                 }
             });
         });
-        
+
         return res.json({ success: true, pastItems });
     } catch (error: any) {
         return res.status(500).json({ success: false, message: error.message });
@@ -1184,16 +1201,16 @@ export const vendorDeleteAccount = async (req: Request, res: Response) => {
         }
 
         if (restaurant.walletBalance && restaurant.walletBalance > 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `First you have to clear your pending payout (₹${restaurant.walletBalance}) with the admin. Once the admin clears your payment, you can permanently delete your account.` 
+            return res.status(400).json({
+                success: false,
+                message: `First you have to clear your pending payout (₹${restaurant.walletBalance}) with the admin. Once the admin clears your payment, you can permanently delete your account.`
             });
         }
 
         // We assume the user _id matches the Restaurant _id or the restaurant auth mapping.
         await Restaurant.findByIdAndDelete(restaurantId);
         await UserModel.findByIdAndDelete(restaurantId);
-        
+
         return res.json({ success: true, message: "Account deleted successfully" });
     } catch (error: any) {
         console.error("Delete restaurant account error:", error);
