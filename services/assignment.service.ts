@@ -1,6 +1,7 @@
 import Order from "../models/Order.model.js";
 import User from "../models/User.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
+import DeliveryZone from "../models/DeliveryZone.model.js";
 import { emitOrderAssignedToDriver, emitOrderStatusUpdate } from "../socket/orderSocket.js";
 import { haversineDistance } from "../utils/delivery.utils.js";
 import { notifyDriverAssigned } from "./notification.service.js";
@@ -129,6 +130,25 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
             }
             
             const [lng, lat] = loc.location.coordinates; 
+
+            // Check if driver is within an active delivery zone
+            const activeZones = await DeliveryZone.find({ isActive: true }).lean();
+            if (activeZones.length > 0) {
+                let driverInZone = false;
+                for (const zone of activeZones) {
+                    const center = zone.center || { lat: 28.4595, lng: 77.0266 };
+                    const radiusKm = zone.radiusKm || 15;
+                    const d = haversineDistance(lat, lng, center.lat, center.lng);
+                    if (d <= radiusKm) {
+                        driverInZone = true;
+                        break;
+                    }
+                }
+                if (!driverInZone) {
+                    continue; // Skip drivers outside active delivery zones
+                }
+            }
+
             const distance = haversineDistance(lat, lng, storeLat, storeLng);
             
             if (distance < minDistance) {

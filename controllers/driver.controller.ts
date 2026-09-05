@@ -51,15 +51,72 @@ export const getFreeDrivers = asyncHandler(async (req: Request, res: Response) =
     return res.json(freeDrivers);
 });
 
+import DeliveryZone from "../models/DeliveryZone.model.js";
+
+// Helper: Haversine distance in km
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 /**
  * Toggle driver online/offline status
  */
 export const toggleOnlineStatus = asyncHandler(async (req: Request, res: Response) => {
     const user = (req as any).user;
-    const { isOnline } = req.body;
+    const { isOnline, latitude, longitude, lat, lng } = req.body;
 
     if (typeof isOnline !== "boolean") {
-        return res.status(400).json({ message: "isOnline boolean is required" });
+        return res.status(400).json({ success: false, message: "isOnline boolean is required" });
+    }
+
+    // If driver is attempting to go online, verify if location is inside active Delivery Zone
+    if (isOnline) {
+        let checkLat = lat !== undefined ? Number(lat) : (latitude !== undefined ? Number(latitude) : undefined);
+        let checkLng = lng !== undefined ? Number(lng) : (longitude !== undefined ? Number(longitude) : undefined);
+
+        if (checkLat === undefined || checkLng === undefined) {
+            const lastLoc = await DriverLocation.findOne({ driver: user._id });
+            if (lastLoc && lastLoc.location?.coordinates?.length >= 2) {
+                checkLng = lastLoc.location.coordinates[0];
+                checkLat = lastLoc.location.coordinates[1];
+            }
+        }
+
+        if (checkLat !== undefined && checkLng !== undefined && !isNaN(checkLat) && !isNaN(checkLng)) {
+            const activeZones = await DeliveryZone.find({ isActive: true }).lean();
+            if (activeZones.length > 0) {
+                let inZone = false;
+                for (const zone of activeZones) {
+                    const center = zone.center || { lat: 28.4595, lng: 77.0266 };
+                    const radiusKm = zone.radiusKm || 15;
+                    const dist = calculateDistanceKm(checkLat, checkLng, center.lat, center.lng);
+                    if (dist <= radiusKm) {
+                        inZone = true;
+                        break;
+                    }
+                }
+
+                if (!inZone) {
+                    const activeCities = activeZones.map((z: any) => z.name || z.state || z.city);
+                    return res.status(403).json({
+                        success: false,
+                        inZone: false,
+                        message: `You are outside active delivery zones. We currently operate in: ${activeCities.join(", ")}. Please move into an active delivery zone to go online and accept delivery orders.`,
+                        activeCities,
+                    });
+                }
+            }
+        }
     }
 
     const updateObj: any = { isOnline };
@@ -75,7 +132,7 @@ export const toggleOnlineStatus = asyncHandler(async (req: Request, res: Respons
 
     emitDriverStatusUpdate(user._id.toString(), isOnline, { user: updatedUser });
 
-    return res.json({ message: `Status updated to ${isOnline ? "Online" : "Offline"}`, user: updatedUser });
+    return res.json({ success: true, message: `Status updated to ${isOnline ? "Online" : "Offline"}`, user: updatedUser });
 });
 
 /**
@@ -119,7 +176,30 @@ export const updateDriverLocation = asyncHandler(async (req: Request, res: Respo
     // Emit to admin room in real-time
     emitDriverLocation(driverId, { lat: Number(lat), lng: Number(lng), speed, heading });
 
-    return res.json({ message: "Location updated" });
+    // Check delivery zone in real-time
+    const activeZones = await DeliveryZone.find({ isActive: true }).lean();
+    let inZone = true;
+    let activeCities: string[] = [];
+    if (activeZones.length > 0) {
+        inZone = false;
+        activeCities = activeZones.map((z: any) => z.name || z.state || z.city);
+        for (const zone of activeZones) {
+            const center = zone.center || { lat: 28.4595, lng: 77.0266 };
+            const radiusKm = zone.radiusKm || 15;
+            const dist = calculateDistanceKm(Number(lat), Number(lng), center.lat, center.lng);
+            if (dist <= radiusKm) {
+                inZone = true;
+                break;
+            }
+        }
+    }
+
+    return res.json({ 
+        success: true, 
+        message: "Location updated",
+        inZone,
+        activeCities,
+    });
 });
 
 /**

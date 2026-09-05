@@ -33,6 +33,7 @@ import uploadRoutes from "./routes/upload.routes.js";
 import settingsRoutes from "./routes/settings.routes.js";
 import bannerRoutes from "./routes/banner.routes.js";
 import issueRoutes from "./routes/issue.routes.js";
+import zoneRoutes from "./routes/zone.routes.js";
 import { razorpayWebhook } from "./controllers/razorpay.controller.js";
 
 import { requireJsonContent } from "./middlewares/contentType.middleware.js";
@@ -147,6 +148,7 @@ app.use(`${BASE_PATH}/upload`, uploadRoutes);
 app.use(`${BASE_PATH}/settings`, settingsRoutes);
 app.use(`${BASE_PATH}/banners`, bannerRoutes);
 app.use(`${BASE_PATH}/issues`, issueRoutes);
+app.use(`${BASE_PATH}/zones`, zoneRoutes);
 
 app.use(`${BASE_PATH}/razorpay`, razorpayRoutes);
 
