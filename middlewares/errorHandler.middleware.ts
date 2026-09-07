@@ -22,6 +22,24 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       .json({ message: err.message, errorCode: err.errorCode });
   }
 
+  // Handle Multer upload errors gracefully
+  if (err.name === "MulterError" || (err as any)?.code?.startsWith?.("LIMIT_")) {
+    const multerCode = (err as any)?.code;
+    let uploadMessage = "File upload failed";
+
+    if (multerCode === "LIMIT_FILE_SIZE") {
+      uploadMessage = "Your file size is too large. Please keep under 2 MB (recommended under 1 MB).";
+    } else if (multerCode === "LIMIT_UNEXPECTED_FILE") {
+      uploadMessage = "Unexpected file field in upload request.";
+    } else {
+      uploadMessage = `Upload error: ${err.message || multerCode}`;
+    }
+
+    return res
+      .status(HTTPSTATUS.BAD_REQUEST)
+      .json({ message: uploadMessage, success: false, errorCode: multerCode });
+  }
+
   const isProduction = process.env.NODE_ENV === "production";
   const errorMessage = isProduction
     ? "An unexpected internal server error occurred"

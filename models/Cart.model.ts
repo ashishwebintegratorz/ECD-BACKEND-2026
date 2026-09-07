@@ -7,6 +7,7 @@ export interface ICartItem {
   priceAtAdd: number;
   name?: string;
   image?: string;
+  portion?: string;
 }
 
 export interface ICart extends Document {
@@ -18,12 +19,13 @@ export interface ICart extends Document {
 
 const CartItemSchema = new Schema<ICartItem>(
   {
-    product: { type: Schema.Types.ObjectId, ref: "Product", required: true },
+    product: { type: Schema.Types.ObjectId, ref: "Product", required: false },
     variantIndex: { type: Number },
     qty: { type: Number, default: 1 },
     priceAtAdd: { type: Number, required: true },
     name: { type: String },
     image: { type: String },
+    portion: { type: String, default: "Full" },
   },
   { _id: false }
 );

@@ -12,6 +12,8 @@ import { emitRestaurantStatusUpdate, emitAccountSuspended } from "../socket/orde
 import { createAndEmitAdminNotification } from "../services/adminNotification.service.js";
 import UserModel from "../models/User.model.js";
 import { signAccessJwt } from "../utils/jwt.js";
+import { imagekit } from "../config/imagekit.js";
+import { uploadToImageKit } from "../services/imagekit.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -186,7 +188,7 @@ export const searchRestaurants = async (req: Request, res: Response) => {
             { description: { $regex: regex } },
         ],
     })
-        .select("name slug description address location logo coverImage categories adminRating featured orderCount menu")
+        .select("name slug description address location logo coverImage categories adminRating avgRating totalReviews featured orderCount storeType isActive isOnline menu")
         .sort({ featured: -1, adminRating: -1, orderCount: -1 })
         .limit(50)
         .lean();
@@ -219,6 +221,7 @@ export const getRestaurantsByCategory = async (req: Request, res: Response) => {
             { "menu.name": { $regex: regex } }
         ]
     })
+        .select("name slug description address location logo coverImage categories adminRating avgRating totalReviews featured orderCount storeType isActive isOnline menu")
         .sort({ featured: -1, adminRating: -1, orderCount: -1 })
         .limit(50)
         .lean();
@@ -319,6 +322,9 @@ export const getRestaurantBySlug = async (req: Request, res: Response) => {
 
         // Hide internal B2B price from public users
         delete (item as any).b2bPrice;
+        if (item.portions && Array.isArray(item.portions)) {
+            item.portions.forEach((p: any) => delete p.b2bPrice);
+        }
 
         if (!groupedMenu[item.foodType]) groupedMenu[item.foodType] = [];
         groupedMenu[item.foodType].push(item);
@@ -338,8 +344,12 @@ export const getRestaurantBySlug = async (req: Request, res: Response) => {
             logo: restaurant.logo,
             coverImage: restaurant.coverImage,
             adminRating: restaurant.adminRating,
+            avgRating: restaurant.avgRating,
+            totalReviews: restaurant.totalReviews,
             featured: restaurant.featured,
             orderCount: restaurant.orderCount,
+            isActive: restaurant.isActive,
+            isOnline: restaurant.isOnline,
             createdAt: restaurant.createdAt,
         },
         menu: groupedMenu, // { veg: [...], "non-veg": [...], vegan: [...] }
@@ -366,7 +376,12 @@ export const getRestaurantMenu = async (req: Request, res: Response) => {
     if (foodType) menu = menu.filter((item) => item.foodType === foodType);
 
     // Hide internal B2B price from public users
-    menu.forEach(item => delete (item as any).b2bPrice);
+    menu.forEach(item => {
+        delete (item as any).b2bPrice;
+        if (item.portions && Array.isArray(item.portions)) {
+            item.portions.forEach((p: any) => delete p.b2bPrice);
+        }
+    });
 
     return res.json({ menu });
 };
@@ -498,21 +513,61 @@ export const deleteRestaurant = async (req: Request, res: Response) => {
     return res.json({ message: "Restaurant deleted" });
 };
 
+// Helper to upload base64 image strings to ImageKit CDN so database never stores raw base64
+const normalizeAndUploadImage = async (image: string | undefined, name: string): Promise<string> => {
+    if (!image || typeof image !== 'string') return image || '';
+    const trimmed = image.trim();
+    if (trimmed.startsWith('data:image/') || trimmed.startsWith('data:application/')) {
+        try {
+            const base64Data = trimmed.includes(',') ? trimmed.split(',')[1] : trimmed;
+            const uploadRes = await imagekit.upload({
+                file: base64Data,
+                fileName: `menu_${Date.now()}_${slugify(name || 'item')}.jpg`,
+                folder: '/ecd-menu',
+            });
+            if (uploadRes && uploadRes.url) {
+                return uploadRes.url;
+            }
+        } catch (err) {
+            console.error("Failed to auto-upload base64 menu image to ImageKit:", err);
+        }
+    }
+    return trimmed;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN: POST /api/restaurants/admin/menu/add/:id
 // ─────────────────────────────────────────────────────────────────────────────
 export const addMenuItem = async (req: Request, res: Response) => {
-    const { name, description, price, b2bPrice, image, foodType, isAvailable } = req.body;
+    const { name, description, price, b2bPrice, image, foodType, isAvailable, portion, portions } = req.body;
 
     const restaurant = await Restaurant.findById(req.params.id);
     if (!restaurant) throw new NotFoundException("Restaurant not found");
 
+    const finalImage = await normalizeAndUploadImage(image, name);
+
+    let finalPortions = portions;
+    if (!finalPortions || !Array.isArray(finalPortions) || finalPortions.length === 0) {
+        finalPortions = [
+            {
+                name: portion || 'Full',
+                price: Number(price),
+                b2bPrice: b2bPrice !== undefined ? Number(b2bPrice) : 0,
+                isDefault: true,
+            }
+        ];
+    }
+
+    const defaultPortion = finalPortions.find((p: any) => p.isDefault) || finalPortions[0];
+
     restaurant.menu.push({
         name,
         description,
-        price: Number(price),
-        b2bPrice: b2bPrice !== undefined ? Number(b2bPrice) : 0,
-        image,
+        price: defaultPortion.price !== undefined ? Number(defaultPortion.price) : Number(price),
+        b2bPrice: defaultPortion.b2bPrice !== undefined ? Number(defaultPortion.b2bPrice) : (b2bPrice !== undefined ? Number(b2bPrice) : 0),
+        portion: portion || defaultPortion.name || 'Full',
+        portions: finalPortions,
+        image: finalImage,
         foodType,
         isAvailable: isAvailable ?? true,
     });
@@ -542,8 +597,20 @@ export const updateMenuItem = async (req: Request, res: Response) => {
     if (req.body.description !== undefined) item.description = req.body.description;
     if (req.body.price !== undefined) item.price = Number(req.body.price);
     if (req.body.b2bPrice !== undefined) (item as any).b2bPrice = Number(req.body.b2bPrice);
-    if (req.body.image !== undefined) item.image = req.body.image;
+    if (req.body.image !== undefined) {
+        item.image = await normalizeAndUploadImage(req.body.image, item.name);
+    }
     if (req.body.foodType !== undefined) item.foodType = req.body.foodType;
+    if (req.body.portion !== undefined) (item as any).portion = req.body.portion;
+    if (req.body.portions !== undefined && Array.isArray(req.body.portions)) {
+        (item as any).portions = req.body.portions;
+        const defaultPortion = req.body.portions.find((p: any) => p.isDefault) || req.body.portions[0];
+        if (defaultPortion) {
+            if (req.body.portion === undefined) (item as any).portion = defaultPortion.name;
+            if (req.body.price === undefined && defaultPortion.price !== undefined) item.price = Number(defaultPortion.price);
+            if (req.body.b2bPrice === undefined && defaultPortion.b2bPrice !== undefined) (item as any).b2bPrice = Number(defaultPortion.b2bPrice);
+        }
+    }
     if (req.body.isAvailable !== undefined) item.isAvailable = req.body.isAvailable;
 
     await restaurant.save();
@@ -937,12 +1004,30 @@ export const vendorAddMenuItem = async (req: Request, res: Response) => {
         const rawB2B = req.body.b2bPrice !== undefined ? req.body.b2bPrice : (req.body.price !== undefined ? req.body.price : req.body.b2b_price);
         const parsedB2B = Number(rawB2B) || 0;
 
+        const finalImage = await normalizeAndUploadImage(image, name);
+
+        let finalPortions = req.body.portions;
+        if (!finalPortions || !Array.isArray(finalPortions) || finalPortions.length === 0) {
+            finalPortions = [
+                {
+                    name: req.body.portion || "Full",
+                    price: 0,
+                    b2bPrice: parsedB2B,
+                    isDefault: true
+                }
+            ];
+        }
+
+        const defaultPortion = finalPortions.find((p: any) => p.isDefault) || finalPortions[0];
+
         const newItem = {
             name,
             description,
             price: 0, // Admin sets this later
-            b2bPrice: parsedB2B,
-            image,
+            b2bPrice: defaultPortion.b2bPrice !== undefined ? Number(defaultPortion.b2bPrice) : parsedB2B,
+            portion: req.body.portion || defaultPortion.name || "Full",
+            portions: finalPortions,
+            image: finalImage,
             foodType,
             isAvailable: false, // Default not available until approved
             approvalStatus: "pending" as any
@@ -1048,12 +1133,24 @@ export const adminApproveMenuItem = async (req: Request, res: Response) => {
             if (approvalStatus === "approved") {
                 menuItem.isAvailable = true;
                 menuItem.deleteReason = undefined;
+
+                // Ensure image is uploaded to ImageKit if it was stored as base64
+                if (menuItem.image && typeof menuItem.image === 'string' && (menuItem.image.startsWith('data:image/') || menuItem.image.startsWith('data:application/'))) {
+                    menuItem.image = await normalizeAndUploadImage(menuItem.image, menuItem.name);
+                }
             } else if (approvalStatus === "rejected") {
                 menuItem.isAvailable = false;
             }
         }
         if (price !== undefined && price !== null) {
             menuItem.price = Number(price);
+        }
+        if (req.body.portions !== undefined && Array.isArray(req.body.portions)) {
+            menuItem.portions = req.body.portions;
+            const def = req.body.portions.find((p: any) => p.isDefault) || req.body.portions[0];
+            if (def && def.price !== undefined) {
+                menuItem.price = Number(def.price);
+            }
         }
 
         await restaurant.save();
@@ -1084,6 +1181,8 @@ export const getPendingMenuItems = async (req: Request, res: Response) => {
                         name: item.name,
                         description: item.description,
                         b2bPrice: item.b2bPrice,
+                        portion: item.portion || "Full",
+                        portions: item.portions && item.portions.length > 0 ? item.portions : [{ name: item.portion || "Full", price: item.price || 0, b2bPrice: item.b2bPrice || 0, isDefault: true }],
                         image: item.image,
                         foodType: item.foodType,
                         approvalStatus: (item as any).approvalStatus,
@@ -1168,6 +1267,8 @@ export const getPastMenuApprovals = async (req: Request, res: Response) => {
                         description: item.description,
                         b2bPrice: item.b2bPrice,
                         price: item.price,
+                        portion: item.portion || "Full",
+                        portions: item.portions && item.portions.length > 0 ? item.portions : [{ name: item.portion || "Full", price: item.price || 0, b2bPrice: item.b2bPrice || 0, isDefault: true }],
                         image: item.image,
                         foodType: item.foodType,
                         approvalStatus: (item as any).approvalStatus,

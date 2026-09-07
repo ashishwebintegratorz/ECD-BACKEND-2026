@@ -35,6 +35,8 @@ export interface ICancellationLog {
 export interface IOrderItem {
   product: Types.ObjectId;
   name?: string;
+  image?: string;
+  portion?: string;
   variantIndex?: number;
   qty: number;
   price: number;
@@ -83,8 +85,10 @@ export interface IOrder extends Document {
 
 const OrderItemSchema = new Schema<IOrderItem>(
   {
-    product: { type: Schema.Types.ObjectId, ref: "Product", required: true },
+    product: { type: Schema.Types.ObjectId, ref: "Product", required: false },
     name: { type: String },
+    image: { type: String },
+    portion: { type: String, default: "Full" },
     variantIndex: { type: Number },
     qty: { type: Number, default: 1 },
     price: { type: Number, required: true },

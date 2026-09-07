@@ -26,7 +26,8 @@ import Restaurant from "../models/Restaurant.model.js";
 
 const validateProductVariant = async (
   productId: string,
-  variantIndex?: number
+  variantIndex?: number,
+  selectedPortion?: string
 ) => {
   let product: any = await Product.findById(productId);
   let variant: any;
@@ -38,9 +39,20 @@ const validateProductVariant = async (
       const menuItem: any = restaurant.menu.find((m: any) => m._id?.toString() === productId.toString());
       if (menuItem) {
         if (!menuItem.isAvailable) throw new BadRequestException("Menu item is currently unavailable");
+        let price = menuItem.price;
+        let portionName = selectedPortion || menuItem.portion || "Full";
+        if (selectedPortion && menuItem.portions && menuItem.portions.length > 0) {
+          const matchedPortion = menuItem.portions.find((p: any) => p.name.toLowerCase() === selectedPortion.toLowerCase());
+          if (matchedPortion) {
+            price = matchedPortion.price;
+            portionName = matchedPortion.name;
+          }
+        }
         return {
           product: { _id: menuItem._id, name: menuItem.name },
-          variant: { price: menuItem.price, stock: 999, images: [menuItem.image] }
+          variant: { price: price, stock: 999, images: [menuItem.image || menuItem.imageUrl] },
+          portion: portionName,
+          image: menuItem.image || menuItem.imageUrl || ""
         };
       }
     }
@@ -58,6 +70,8 @@ const validateProductVariant = async (
   return {
     product,
     variant,
+    portion: selectedPortion || "Full",
+    image: variant.images?.[0] || ""
   };
 };
 
@@ -79,30 +93,38 @@ export const getCart = async (req: Request, res: Response) => {
 // ==================================================================
 export const addToCart = async (req: Request, res: Response) => {
   const userId = req.user.id;
-  const { productId, variantIndex } = req.body;
+  const { productId, variantIndex, portion: reqPortion, image: reqImage, name: reqName } = req.body;
   const qty = req.body.qty || req.body.quantity;
 
-  console.log(`[addToCart] User: ${userId}, Product: ${productId}, Qty: ${qty}`);
+  console.log(`[addToCart] User: ${userId}, Product: ${productId}, Qty: ${qty}, Portion: ${reqPortion}`);
 
   if (!productId) throw new BadRequestException("Product ID is required");
   if (!qty || qty <= 0) throw new BadRequestException("Invalid quantity");
 
-  const { product, variant } = await validateProductVariant(
+  const { product, variant, portion: validatedPortion, image: validatedImage } = await validateProductVariant(
     productId,
-    variantIndex
+    variantIndex,
+    reqPortion
   );
+
+  const finalPortion = reqPortion || validatedPortion || "Full";
+  const finalImage = reqImage || validatedImage || variant.images?.[0] || "";
+  const finalName = reqName || product.name || "Item";
 
   const cart = await getOrCreateCart(userId);
 
   const existingIndex = cart.items.findIndex(
     (item) =>
-      item.product.toString() === productId &&
+      item.product?.toString() === productId &&
+      (item.portion || "Full") === finalPortion &&
       item.variantIndex === (variantIndex ?? 0)
   );
 
   if (existingIndex >= 0) {
     // Increase quantity
     cart.items[existingIndex].qty += qty;
+    if (finalImage) cart.items[existingIndex].image = finalImage;
+    if (finalPortion) cart.items[existingIndex].portion = finalPortion;
   } else {
     // Add new item
     cart.items.push({
@@ -110,8 +132,9 @@ export const addToCart = async (req: Request, res: Response) => {
       variantIndex: variantIndex || 0,
       qty,
       priceAtAdd: variant.price,
-      name: product.name,
-      image: variant.images?.[0],
+      name: finalName,
+      image: finalImage,
+      portion: finalPortion,
     });
   }
 

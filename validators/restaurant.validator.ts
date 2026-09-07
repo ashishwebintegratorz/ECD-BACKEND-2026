@@ -62,6 +62,13 @@ export const setRatingSchema = z.object({
 });
 
 // ── Add Menu Item ────────────────────────────────────────────────
+const portionItemSchema = z.object({
+    name: z.string(),
+    price: z.coerce.number().min(0).optional(),
+    b2bPrice: z.coerce.number().min(0).optional(),
+    isDefault: z.boolean().optional(),
+});
+
 export const addMenuItemSchema = z.object({
     params: z.object({ id: mongoId }),
     body: z.object({
@@ -69,6 +76,8 @@ export const addMenuItemSchema = z.object({
         description: z.string().optional(),
         price: z.coerce.number().positive("Price must be a positive number"),
         b2bPrice: z.coerce.number().min(0).optional(),
+        portion: z.string().optional(),
+        portions: z.array(portionItemSchema).optional(),
         image: optionalUrl,
         foodType: z.enum(["veg", "non-veg", "vegan"], { error: "foodType must be veg, non-veg, or vegan" }),
         isAvailable: z.boolean().default(true),
@@ -86,6 +95,8 @@ export const updateMenuItemSchema = z.object({
         description: z.string().optional(),
         price: z.coerce.number().positive().optional(),
         b2bPrice: z.coerce.number().min(0).optional(),
+        portion: z.string().optional(),
+        portions: z.array(portionItemSchema).optional(),
         image: optionalUrl,
         foodType: z.enum(["veg", "non-veg", "vegan"]).optional(),
         isAvailable: z.boolean().optional(),

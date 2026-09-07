@@ -207,18 +207,39 @@ export const createOrder = async (req: Request, res: Response) => {
 
   let order;
   try {
-    order = await Order.create({
-      orderNumber: `ORD-${Date.now()}`,
-      customer: userId,
-      store: restaurantId,   // generic store ref (restaurant or grocery)
-      items: cart.items.map((i) => ({
+    const orderItems = cart.items.map((i) => {
+      let itemImage = i.image || "";
+      let itemPortion = i.portion || "Full";
+      let itemName = i.name || "Item";
+
+      if (store?.menu) {
+        const menuItem = store.menu.find((m: any) => m._id?.toString() === i.product?.toString());
+        if (menuItem) {
+          if (!itemImage) itemImage = menuItem.image || (menuItem as any).imageUrl || "";
+          if (!itemPortion || itemPortion === "Full") {
+            itemPortion = i.portion || menuItem.portion || ((menuItem as any).portions?.[0]?.name) || "Full";
+          }
+          if (!itemName || itemName === "Item") itemName = menuItem.name;
+        }
+      }
+
+      return {
         product: i.product,
-        name: i.name || "Item",
+        name: itemName,
+        image: itemImage,
+        portion: itemPortion,
         variantIndex: i.variantIndex || 0,
         qty: i.qty,
         price: i.priceAtAdd,
         subtotal: i.priceAtAdd * i.qty,
-      })),
+      };
+    });
+
+    order = await Order.create({
+      orderNumber: `ORD-${Date.now()}`,
+      customer: userId,
+      store: restaurantId,   // generic store ref (restaurant or grocery)
+      items: orderItems,
       totalAmount,
       deliveryCharge,
       gst,
@@ -1219,11 +1240,29 @@ export const getCancellationStats = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurantOrders = async (req: Request, res: Response) => {
   const { restaurantId } = req.params;
+  const store = await Restaurant.findById(restaurantId).lean();
   const orders = await Order.find({ store: restaurantId })
     .sort({ createdAt: -1 })
     .limit(100)
     .populate("customer", "name phone")
-    .populate("assignedDriver", "name phone riderId");
+    .populate("assignedDriver", "name phone riderId")
+    .lean();
+
+  if (store && store.menu) {
+    orders.forEach((ord: any) => {
+      if (ord.items && Array.isArray(ord.items)) {
+        ord.items.forEach((it: any) => {
+          if (!it.image || !it.portion || it.portion === 'Full') {
+            const menuItem = store.menu.find((m: any) => m._id?.toString() === it.product?.toString());
+            if (menuItem) {
+              if (!it.image) it.image = menuItem.image || (menuItem as any).imageUrl || "";
+              if (!it.portion) it.portion = menuItem.portion || ((menuItem as any).portions?.[0]?.name) || "Full";
+            }
+          }
+        });
+      }
+    });
+  }
 
   return res.json(orders);
 };
