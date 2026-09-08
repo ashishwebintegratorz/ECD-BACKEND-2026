@@ -77,6 +77,20 @@ export function initOrderSocket(instance: Server) {
       socket.leave(`order_${orderId}`);
     });
 
+    // Customer joins their personal room to receive order updates across all screens
+    socket.on("joinCustomer", (customerId: string) => {
+      const targetId = customerId || user?._id?.toString();
+      if (!targetId) return;
+      socket.join(`customer_${targetId}`);
+      console.log(`[Socket] Client ${socket.id} joined customer room: customer_${targetId}`);
+    });
+
+    socket.on("leaveCustomer", (customerId: string) => {
+      const targetId = customerId || user?._id?.toString();
+      if (!targetId) return;
+      socket.leave(`customer_${targetId}`);
+    });
+
     // Restaurant joins their room to receive new order notifications
     socket.on("joinRestaurant", (restaurantId: string) => {
       if (!restaurantId) return;
@@ -180,14 +194,18 @@ export function emitRestaurantStatusUpdate(restaurantId: string, isOnline: boole
 }
 
 // Notify customer + admin when order status changes
-export function emitOrderStatusUpdate(orderId: string, payload: any) {
-  console.log(`[Socket] EMITTING orderStatusUpdated for order_${orderId}:`, payload);
+export function emitOrderStatusUpdate(orderId: string, payload: any, customerId?: string) {
+  console.log(`[Socket] EMITTING orderStatusUpdated for order_${orderId} (Customer: ${customerId || 'unknown'}):`, payload);
   if (!io) {
     console.log("[Socket] Error: io is null!");
     return;
   }
-  io.to(`order_${orderId}`).emit("orderStatusUpdated", { orderId, ...payload });
-  io.to("admins").emit("orderStatusChanged", { orderId, ...payload });
+  const data = { orderId, ...payload };
+  io.to(`order_${orderId}`).emit("orderStatusUpdated", data);
+  if (customerId) {
+    io.to(`customer_${customerId}`).emit("orderStatusUpdated", data);
+  }
+  io.to("admins").emit("orderStatusChanged", data);
 }
 
 // Notify restaurant when a new order arrives

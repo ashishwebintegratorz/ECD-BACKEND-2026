@@ -75,7 +75,7 @@ export const startAssignmentFlow = async (orderId: string, driverId: string) => 
             emitOrderStatusUpdate(orderId, {
                 deliveryStatus: "pending",
                 message: "Driver assignment timed out. Please re-assign.",
-            });
+            }, currentOrder.customer?.toString());
 
             // Re-assign to next nearest driver logic
             assignToNearestDriver(orderId, [driverId]); 
@@ -166,14 +166,14 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
         console.log(`[Auto-Assign] No available drivers for order ${orderId}`);
         
         // Update database so subsequent fetches know there are no riders
-        await Order.findByIdAndUpdate(orderId, { deliveryStatus: "driver_not_found" });
+        const updatedOrd = await Order.findByIdAndUpdate(orderId, { deliveryStatus: "driver_not_found" });
 
-        // Notify restaurant that no driver was found instead of spinning forever
+        // Notify restaurant and customer that no driver was found instead of spinning forever
         emitOrderStatusUpdate(orderId, {
             status: "ready", // keep it ready so they can try again
             deliveryStatus: "driver_not_found",
             message: "No available riders found. Please try assigning again.",
-        });
+        }, updatedOrd?.customer?.toString());
         return false;
     }
 };

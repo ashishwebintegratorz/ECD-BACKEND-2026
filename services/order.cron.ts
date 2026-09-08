@@ -58,7 +58,7 @@ const autoCancelOrders = async () => {
                 deliveryStatus: order.deliveryStatus,
                 message: reason,
                 updatedAt: (order as any).updatedAt,
-            });
+            }, order.customer?.toString());
         }
 
         // 2. Ready orders > 4 minutes (No rider found)
@@ -108,7 +108,7 @@ const autoCancelOrders = async () => {
                 deliveryStatus: order.deliveryStatus,
                 message: reason,
                 updatedAt: (order as any).updatedAt,
-            });
+            }, order.customer?.toString());
         }
 
     } catch (err) {

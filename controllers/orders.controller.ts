@@ -473,19 +473,21 @@ export const restaurantMarkReady = async (req: Request, res: Response) => {
 
   if (order.orderType === "pickup") {
     message = "Order marked as ready for self-pickup.";
+    const customerId = (order.customer as any)?._id?.toString() || order.customer?.toString();
     emitOrderStatusUpdate(orderId, {
       status: order.status,
       deliveryStatus: order.deliveryStatus,
       message: "Your order is ready for pickup. Please collect it from the restaurant.",
       updatedAt: (order as any).updatedAt,
-    });
+    }, customerId);
   } else {
+    const customerId = (order.customer as any)?._id?.toString() || order.customer?.toString();
     emitOrderStatusUpdate(orderId, {
       status: order.status,
       deliveryStatus: order.deliveryStatus,
       message: "Your order is ready. A rider will be assigned shortly.",
       updatedAt: (order as any).updatedAt,
-    });
+    }, customerId);
 
     // Auto-assign to nearest available driver
     assigned = await assignToNearestDriver(orderId).catch(err => {
@@ -557,7 +559,7 @@ export const restaurantCancelOrder = async (req: Request, res: Response) => {
     deliveryStatus: order.deliveryStatus,
     message: dynamicMessage,
     updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   return res.json({ 
     success: true, 
@@ -650,7 +652,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
     deliveryStatus: order.deliveryStatus,
     message: "Order cancelled",
     updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   return res.json({ success: true, order });
 };
@@ -679,7 +681,7 @@ export const failOrder = async (req: Request, res: Response) => {
     deliveryStatus: order.deliveryStatus,
     message: "Payment failed",
     updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   return res.json({ success: true, message: "Order marked as failed", order });
 };
@@ -743,7 +745,7 @@ export const driverAcceptOrder = async (req: Request, res: Response) => {
     message: "Driver has accepted your order",
     assignedDriver: driver,
     updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   return res.json({ message: "Order accepted", order });
 };
@@ -775,7 +777,7 @@ export const driverDeclineOrder = async (req: Request, res: Response) => {
     deliveryStatus: order.deliveryStatus,
     message: "Driver declined. Finding next nearest driver...",
     updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   // Re-assign to next nearest driver logic automatically
   const { assignToNearestDriver } = await import("../services/assignment.service.js");
@@ -873,7 +875,7 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
     deliveryStatus: order.deliveryStatus,
     message: status === "delivered" ? "Order delivered" : "Rider status updated",
     updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   // Push notifications per delivery status
   if (status === "out_for_delivery") {
@@ -914,7 +916,7 @@ export const updateOrderByDriver = async (req: Request, res: Response) => {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
     updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   return res.json({ message: `Delivery status updated to ${status}`, order });
 };
@@ -1118,7 +1120,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     status: order.status,
     deliveryStatus: order.deliveryStatus,
     updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   return res.json(order);
 };
@@ -1361,7 +1363,7 @@ export const restaurantMarkPreparing = async (req: Request, res: Response) => {
       deliveryStatus: order.deliveryStatus,
       message: "Restaurant has started preparing your order",
       updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   return res.json({ message: "Order marked as preparing", order });
 };
@@ -1430,7 +1432,7 @@ export const restaurantVerifyPickup = async (req: Request, res: Response) => {
     updatedAt: (order as any).updatedAt,
     driverName: (order.assignedDriver as any)?.name || "Rider",
     driverPhone: (order.assignedDriver as any)?.phone || "",
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   return res.json({ success: true, message: "OTP verified. Order handed over.", order });
 };
@@ -1481,7 +1483,7 @@ export const restaurantCompletePickup = async (req: Request, res: Response) => {
     deliveryStatus: order.deliveryStatus,
     message: "Order has been collected by the customer",
     updatedAt: (order as any).updatedAt,
-  });
+  }, (order.customer as any)?._id?.toString() || order.customer?.toString());
 
   return res.json({ success: true, message: "Order marked as collected", order });
 };
