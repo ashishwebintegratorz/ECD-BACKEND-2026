@@ -98,8 +98,31 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
 
     const [storeLng, storeLat] = restaurant.location.coordinates;
 
-    // Find all online, non-busy drivers
-    const onlineDrivers = await User.find({ role: "driver", isOnline: true, isReturning: false });
+    // Find all online, active drivers matching the Order's City and Zone
+    const driverQuery: any = {
+        role: "driver",
+        isOnline: true,
+        isReturning: false,
+        status: "active",
+    };
+
+    if (order.cityId) {
+        driverQuery.$or = [
+            { cityId: order.cityId },
+            { cityId: { $exists: false } }, // fallback during initial migration
+        ];
+    }
+
+    if (order.zoneId) {
+        driverQuery.$or = [
+            ...(driverQuery.$or || []),
+            { zoneIds: { $in: [order.zoneId] } },
+            { zoneIds: { $exists: false } },
+            { zoneIds: { $size: 0 } },
+        ];
+    }
+
+    const onlineDrivers = await User.find(driverQuery);
     
     let nearestDriverId = null;
     let minDistance = Infinity;
@@ -108,6 +131,21 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
 
     for (const driver of onlineDrivers) {
         if (excludedIds.includes(driver._id.toString())) continue;
+
+        // If driver has explicit city assigned, enforce strict equality with order city
+        if (order.cityId && driver.cityId && driver.cityId.toString() !== order.cityId.toString()) {
+            continue; // Skip driver from different city
+        }
+
+        // If driver has explicit zones assigned, enforce inclusion of order zone
+        if (
+            order.zoneId &&
+            driver.zoneIds &&
+            driver.zoneIds.length > 0 &&
+            !driver.zoneIds.some((zid: any) => zid.toString() === order.zoneId?.toString())
+        ) {
+            continue; // Skip driver not serving this zone
+        }
 
         // Check if driver has active order
         const activeOrder = await Order.findOne({
@@ -119,7 +157,7 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
             // Driver is free, get their location
             const loc = await DriverLocation.findOne({ driver: driver._id });
             
-            // If no location found or it hasn't been updated in 2 minutes, consider them offline
+            // If no location found or it hasn't been updated in 60 minutes, skip
             if (!loc || !loc.updatedAt) {
                 continue; // Skip drivers with no location
             }
@@ -131,8 +169,12 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
             
             const [lng, lat] = loc.location.coordinates; 
 
-            // Check if driver is within an active delivery zone
-            const activeZones = await DeliveryZone.find({ isActive: true }).lean();
+            // Check if driver is within the order's specific city delivery zone
+            const zoneQuery: any = { isActive: true };
+            if (order.cityId) {
+                zoneQuery.cityId = order.cityId;
+            }
+            const activeZones = await DeliveryZone.find(zoneQuery).lean();
             if (activeZones.length > 0) {
                 let driverInZone = false;
                 for (const zone of activeZones) {
@@ -145,7 +187,7 @@ export const assignToNearestDriver = async (orderId: string, excludeDriverIds: s
                     }
                 }
                 if (!driverInZone) {
-                    continue; // Skip drivers outside active delivery zones
+                    continue; // Skip drivers outside the target city's active delivery zones
                 }
             }
 

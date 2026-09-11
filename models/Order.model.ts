@@ -51,6 +51,12 @@ export interface IOrder extends Document {
   pickupTime?: string;
   customer: Types.ObjectId;
   store: Types.ObjectId;         // generic ref — works for both restaurant and grocery
+  cityId?: Types.ObjectId;       // Ref to City
+  zoneId?: Types.ObjectId;       // Ref to DeliveryZone
+  deliveryCoordinates?: {
+    lat: number;
+    lng: number;
+  };
   items: IOrderItem[];
   totalAmount: number;
   deliveryCharge: number;
@@ -114,6 +120,12 @@ const OrderSchema = new Schema<IOrder>(
     pickupTime: { type: String },
     customer: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     store: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
+    cityId: { type: Schema.Types.ObjectId, ref: "City", index: true },
+    zoneId: { type: Schema.Types.ObjectId, ref: "DeliveryZone", index: true },
+    deliveryCoordinates: {
+      lat: { type: Number },
+      lng: { type: Number },
+    },
     items: { type: [OrderItemSchema], required: true },
     totalAmount: { type: Number, required: true },
     deliveryCharge: { type: Number, required: true, default: 0 },
@@ -151,6 +163,7 @@ const OrderSchema = new Schema<IOrder>(
 );
 
 OrderSchema.index({ customer: 1, createdAt: -1 });
+OrderSchema.index({ cityId: 1, zoneId: 1, status: 1 });
 OrderSchema.index({ status: 1, assignedDriver: 1 });
 OrderSchema.index({ deliveryStatus: 1, assignedDriver: 1 });
 OrderSchema.index({ cancelledBy: 1, createdAt: -1 }); // admin cancellation queries

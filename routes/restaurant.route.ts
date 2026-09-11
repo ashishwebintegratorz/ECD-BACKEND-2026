@@ -26,7 +26,10 @@ import {
     getPendingMenuItems,
     vendorRequestDeleteMenuItem,
     getPastMenuApprovals,
-    vendorDeleteAccount
+    vendorDeleteAccount,
+    getRestaurantCategories,
+    addRestaurantCategory,
+    deleteRestaurantCategory
 } from "../controllers/restaurant.controller.js";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
@@ -212,5 +215,15 @@ router.delete("/:restaurantId/menu/:itemId/request-delete", jwtAuth, requireRole
 
 // DELETE /api/restaurants/vendor/delete-account
 router.delete("/vendor/delete-account", jwtAuth, requireRole("restaurant" as any, "admin"), asyncHandler(vendorDeleteAccount));
+
+// ── Category Management for Restaurant ───────────────────────────
+// GET /api/restaurants/:id/categories
+router.get("/:id/categories", asyncHandler(getRestaurantCategories));
+
+// POST /api/restaurants/:id/categories
+router.post("/:id/categories", jwtAuth, requireRole("admin", "restaurant"), asyncHandler(addRestaurantCategory));
+
+// DELETE /api/restaurants/:id/categories/:categoryName
+router.delete("/:id/categories/:categoryName", jwtAuth, requireRole("admin", "restaurant"), asyncHandler(deleteRestaurantCategory));
 
 export default router;

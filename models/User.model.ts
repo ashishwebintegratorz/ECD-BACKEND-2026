@@ -16,7 +16,9 @@ export interface IUser extends Document {
   addresses?: Types.ObjectId[];
   isOnline: boolean;
   isReturning: boolean;
-  upi?: string;         // ✅ NEW: Driver UPI ID
+  cityId?: Types.ObjectId; // Assigned City (for riders)
+  zoneIds?: Types.ObjectId[]; // Assigned Delivery Zones (for riders)
+  upi?: string;         // ✅ Driver UPI ID
   deliveryOtp?: string; // fixed OTP used to confirm delivery
   riderId?: string;     // unique identifier for driver (e.g. DRV_001)
   totalWorkSeconds?: number;
@@ -57,7 +59,9 @@ const UserSchema = new Schema<IUser>(
     addresses: [{ type: Schema.Types.ObjectId, ref: "Address" }],
     isOnline: { type: Boolean, default: false, index: true },
     isReturning: { type: Boolean, default: false, index: true },
-    upi: { type: String }, // ✅ NEW: Driver UPI ID
+    cityId: { type: Schema.Types.ObjectId, ref: "City", index: true },
+    zoneIds: [{ type: Schema.Types.ObjectId, ref: "DeliveryZone", index: true }],
+    upi: { type: String }, // Driver UPI ID
     deliveryOtp: { type: String },
     riderId: { type: String, unique: true, sparse: true },
     totalWorkSeconds: { type: Number, default: 0 },
@@ -76,5 +80,7 @@ const UserSchema = new Schema<IUser>(
   },
   { timestamps: true }
 );
+
+UserSchema.index({ role: 1, isOnline: 1, cityId: 1, zoneIds: 1 });
 
 export default model<IUser>("User", UserSchema);

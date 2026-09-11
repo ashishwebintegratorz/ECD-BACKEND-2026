@@ -14,10 +14,87 @@ import UserModel from "../models/User.model.js";
 import { signAccessJwt } from "../utils/jwt.js";
 import { imagekit } from "../config/imagekit.js";
 import { uploadToImageKit } from "../services/imagekit.service.js";
+import DeliveryZone from "../models/DeliveryZone.model.js";
+import City from "../models/City.model.js";
+import { isPointInPolygon, calculateDistanceKm } from "../services/locationValidation.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Auto-resolve cityId and zoneIds for a restaurant given coords / inputs
+export const resolveRestaurantGeo = async (
+    lng?: number,
+    lat?: number,
+    cityId?: string,
+    zoneIds?: string[] | string
+): Promise<{ resolvedCityId?: Types.ObjectId; resolvedZoneIds: Types.ObjectId[] }> => {
+    let resolvedZoneIds: Types.ObjectId[] = [];
+    let resolvedCityId: Types.ObjectId | undefined = undefined;
+
+    const rawZones = Array.isArray(zoneIds) ? zoneIds : (zoneIds ? [zoneIds] : []);
+    if (rawZones.length > 0) {
+        resolvedZoneIds = rawZones
+            .filter((id) => id && Types.ObjectId.isValid(String(id)))
+            .map((id) => toObjectId(String(id)));
+    }
+
+    if (cityId && Types.ObjectId.isValid(String(cityId))) {
+        resolvedCityId = toObjectId(String(cityId));
+    }
+
+    if (lat !== undefined && lng !== undefined && !isNaN(Number(lat)) && !isNaN(Number(lng)) && Number(lat) !== 0 && Number(lng) !== 0) {
+        const numLat = Number(lat);
+        const numLng = Number(lng);
+
+        const activeZones = await DeliveryZone.find({ isActive: true }).lean();
+        const matchedZoneIds: Types.ObjectId[] = [];
+        let matchedCityIdFromZone: Types.ObjectId | undefined = undefined;
+
+        for (const zone of activeZones) {
+            let isInside = false;
+            if (
+                zone.polygonCoordinates &&
+                Array.isArray(zone.polygonCoordinates) &&
+                zone.polygonCoordinates.length >= 3
+            ) {
+                isInside = isPointInPolygon([numLng, numLat], zone.polygonCoordinates);
+            }
+            if (!isInside) {
+                const center = zone.center || { lat: 28.4595, lng: 77.0266 };
+                const radius = zone.radiusKm || 15;
+                const dist = calculateDistanceKm(numLat, numLng, center.lat, center.lng);
+                if (dist <= radius) {
+                    isInside = true;
+                }
+            }
+
+            if (isInside) {
+                matchedZoneIds.push(zone._id as Types.ObjectId);
+                if (!matchedCityIdFromZone && zone.cityId) {
+                    matchedCityIdFromZone = zone.cityId as Types.ObjectId;
+                }
+            }
+        }
+
+        if (matchedZoneIds.length > 0) {
+            if (resolvedZoneIds.length === 0) {
+                resolvedZoneIds = matchedZoneIds;
+            }
+            if (!resolvedCityId && matchedCityIdFromZone) {
+                resolvedCityId = matchedCityIdFromZone;
+            }
+        }
+    }
+
+    // Fallback: If cityId is set but no zones yet, match all active zones for that city
+    if (resolvedCityId && resolvedZoneIds.length === 0) {
+        const cityZones = await DeliveryZone.find({ cityId: resolvedCityId, isActive: true }).lean();
+        resolvedZoneIds = cityZones.map(z => z._id as Types.ObjectId);
+    }
+
+    return { resolvedCityId, resolvedZoneIds };
+};
 
 // Ranking score — adminRating is primary, featured is a hard boost
 // Score = (featured ? 10 : 0) + adminRating*2 + log(orderCount+1) - distanceKm*0.1
@@ -44,12 +121,7 @@ const haversineKm = (
     const a =
         Math.sin(dLat / 2) ** 2 +
         Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-    let dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    // Cap distance for remote testing
-    if (dist > 15) {
-        dist = 2.5 + (Math.random() * 5); // Random distance between 2.5 and 7.5 km
-    }
+    const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return dist;
 };
 
@@ -57,7 +129,7 @@ const toObjectId = (id: string) => new Types.ObjectId(id as string);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC: GET /api/restaurants/list
-// Query: ?page=1&limit=10&search=&lat=&lng=
+// Query: ?page=1&limit=10&search=&lat=&lng=&cityId=&zoneId=
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurants = async (req: Request, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -67,6 +139,9 @@ export const getRestaurants = async (req: Request, res: Response) => {
     const userLat = req.query.lat ? Number(req.query.lat) : null;
     const userLng = req.query.lng ? Number(req.query.lng) : null;
     const hasCoords = userLat !== null && userLng !== null;
+
+    const cityId = (req.query.cityId as string) || "";
+    const zoneId = (req.query.zoneId as string) || "";
 
     const dietary = req.query.dietary ? String(req.query.dietary) : undefined; // "Veg" or "Non-Veg"
 
@@ -78,36 +153,63 @@ export const getRestaurants = async (req: Request, res: Response) => {
 
     const status = req.query.status ? String(req.query.status) : undefined; // "Open Now" or "Closed"
 
-    const filter: any = { isActive: true };
-    if (storeType) filter.storeType = storeType;
+    const andConditions: any[] = [{ isActive: true }];
+
+    if (storeType) andConditions.push({ storeType });
+
+    // City & Zone Filtering:
+    if (cityId && Types.ObjectId.isValid(cityId) && zoneId && Types.ObjectId.isValid(zoneId)) {
+        andConditions.push({
+            $or: [
+                { cityId: toObjectId(cityId) },
+                { zoneIds: { $in: [toObjectId(zoneId)] } },
+            ],
+        });
+    } else if (zoneId && Types.ObjectId.isValid(zoneId)) {
+        andConditions.push({
+            $or: [
+                { zoneIds: { $in: [toObjectId(zoneId)] } },
+                { zoneIds: { $size: 0 } },
+                { zoneIds: { $exists: false } },
+            ],
+        });
+    } else if (cityId && Types.ObjectId.isValid(cityId)) {
+        andConditions.push({ cityId: toObjectId(cityId) });
+    }
+
     if (search) {
-        filter.$or = [
-            { name: { $regex: search, $options: "i" } },
-            { description: { $regex: search, $options: "i" } },
-        ];
+        andConditions.push({
+            $or: [
+                { name: { $regex: search, $options: "i" } },
+                { description: { $regex: search, $options: "i" } },
+            ],
+        });
     }
 
     if (dietary === "Veg") {
-        filter["menu.foodType"] = { $in: ["veg", "vegan"] };
+        andConditions.push({ "menu.foodType": { $in: ["veg", "vegan"] } });
     } else if (dietary === "Non-Veg") {
-        filter["menu.foodType"] = "non-veg";
+        andConditions.push({ "menu.foodType": "non-veg" });
     }
 
     if (minPrice !== null || maxPrice !== null) {
-        filter["menu.price"] = {};
-        if (minPrice !== null) filter["menu.price"].$gte = minPrice;
-        if (maxPrice !== null) filter["menu.price"].$lte = maxPrice;
+        const priceCond: any = {};
+        if (minPrice !== null) priceCond.$gte = minPrice;
+        if (maxPrice !== null) priceCond.$lte = maxPrice;
+        andConditions.push({ "menu.price": priceCond });
     }
 
     if (minRating !== null) {
-        filter.adminRating = { $gte: minRating };
+        andConditions.push({ adminRating: { $gte: minRating } });
     }
 
     if (status === "Open Now") {
-        filter.isOnline = true;
+        andConditions.push({ isOnline: true });
     } else if (status === "Closed") {
-        filter.isOnline = false;
+        andConditions.push({ isOnline: false });
     }
+
+    const filter: any = andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
 
     console.log("Filtering Restaurants with:", JSON.stringify(filter));
     // When no coords: sort entirely in DB — fast, uses compound index
@@ -172,22 +274,52 @@ export const getRestaurants = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const searchRestaurants = async (req: Request, res: Response) => {
     const query = (req.query.query as string) || (req.query.search as string) || "";
+    const cityId = (req.query.cityId as string) || "";
+    const zoneId = (req.query.zoneId as string) || "";
+    const storeType = (req.query.storeType as string) || "";
+
     if (!query) {
         return res.json({ success: true, restaurants: [] });
     }
 
     const regex = new RegExp(query, "i");
 
+    const andConditions: any[] = [
+        { isActive: true },
+        {
+            $or: [
+                { name: { $regex: regex } },
+                { categories: { $regex: regex } },
+                { "menu.name": { $regex: regex } },
+                { description: { $regex: regex } },
+            ],
+        },
+    ];
+
+    if (storeType) andConditions.push({ storeType });
+    if (cityId && Types.ObjectId.isValid(cityId) && zoneId && Types.ObjectId.isValid(zoneId)) {
+        andConditions.push({
+            $or: [
+                { cityId: toObjectId(cityId) },
+                { zoneIds: { $in: [toObjectId(zoneId)] } },
+            ],
+        });
+    } else if (zoneId && Types.ObjectId.isValid(zoneId)) {
+        andConditions.push({
+            $or: [
+                { zoneIds: { $in: [toObjectId(zoneId)] } },
+                { zoneIds: { $size: 0 } },
+                { zoneIds: { $exists: false } },
+            ],
+        });
+    } else if (cityId && Types.ObjectId.isValid(cityId)) {
+        andConditions.push({ cityId: toObjectId(cityId) });
+    }
+
+    const filter: any = { $and: andConditions };
+
     // Search in Restaurant: Name, Categories (string array), Menu Items
-    const restaurants = await Restaurant.find({
-        isActive: true,
-        $or: [
-            { name: { $regex: regex } },
-            { categories: { $regex: regex } },
-            { "menu.name": { $regex: regex } },
-            { description: { $regex: regex } },
-        ],
-    })
+    const restaurants = await Restaurant.find(filter)
         .select("name slug description address location logo coverImage categories adminRating avgRating totalReviews featured orderCount storeType isActive isOnline menu")
         .sort({ featured: -1, adminRating: -1, orderCount: -1 })
         .limit(50)
@@ -205,6 +337,9 @@ export const searchRestaurants = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRestaurantsByCategory = async (req: Request, res: Response) => {
     const slug = String(req.params.slug);
+    const cityId = (req.query.cityId as string) || "";
+    const zoneId = (req.query.zoneId as string) || "";
+    const storeType = (req.query.storeType as string) || "";
 
     // 1. Find the category to get its name
     const category = await Category.findOne({ slug });
@@ -214,13 +349,39 @@ export const getRestaurantsByCategory = async (req: Request, res: Response) => {
     const query = categoryName || slug;
     const regex = new RegExp(query, "i");
 
-    const restaurants = await Restaurant.find({
-        isActive: true,
-        $or: [
-            { categories: { $regex: regex } },
-            { "menu.name": { $regex: regex } }
-        ]
-    })
+    const andConditions: any[] = [
+        { isActive: true },
+        {
+            $or: [
+                { categories: { $regex: regex } },
+                { "menu.name": { $regex: regex } }
+            ]
+        }
+    ];
+
+    if (storeType) andConditions.push({ storeType });
+    if (cityId && Types.ObjectId.isValid(cityId) && zoneId && Types.ObjectId.isValid(zoneId)) {
+        andConditions.push({
+            $or: [
+                { cityId: toObjectId(cityId) },
+                { zoneIds: { $in: [toObjectId(zoneId)] } },
+            ],
+        });
+    } else if (zoneId && Types.ObjectId.isValid(zoneId)) {
+        andConditions.push({
+            $or: [
+                { zoneIds: { $in: [toObjectId(zoneId)] } },
+                { zoneIds: { $size: 0 } },
+                { zoneIds: { $exists: false } },
+            ],
+        });
+    } else if (cityId && Types.ObjectId.isValid(cityId)) {
+        andConditions.push({ cityId: toObjectId(cityId) });
+    }
+
+    const filter: any = { $and: andConditions };
+
+    const restaurants = await Restaurant.find(filter)
         .select("name slug description address location logo coverImage categories adminRating avgRating totalReviews featured orderCount storeType isActive isOnline menu")
         .sort({ featured: -1, adminRating: -1, orderCount: -1 })
         .limit(50)
@@ -239,15 +400,40 @@ export const getRestaurantsByCategory = async (req: Request, res: Response) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const getSuggestions = async (req: Request, res: Response) => {
     const query = (req.query.query as string) || "";
+    const cityId = (req.query.cityId as string) || "";
+    const zoneId = (req.query.zoneId as string) || "";
+
     if (!query || query.length < 2) {
         return res.json({ suggestions: [] });
     }
 
     const regex = new RegExp(query, "i");
 
+    const andConditions: any[] = [{ isActive: true }];
+    if (cityId && Types.ObjectId.isValid(cityId) && zoneId && Types.ObjectId.isValid(zoneId)) {
+        andConditions.push({
+            $or: [
+                { cityId: toObjectId(cityId) },
+                { zoneIds: { $in: [toObjectId(zoneId)] } },
+            ],
+        });
+    } else if (zoneId && Types.ObjectId.isValid(zoneId)) {
+        andConditions.push({
+            $or: [
+                { zoneIds: { $in: [toObjectId(zoneId)] } },
+                { zoneIds: { $size: 0 } },
+                { zoneIds: { $exists: false } },
+            ],
+        });
+    } else if (cityId && Types.ObjectId.isValid(cityId)) {
+        andConditions.push({ cityId: toObjectId(cityId) });
+    }
+
+    const restFilter: any = andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
+
     // 1. Find matching restaurant names
     const restaurantMatches = await Restaurant.find({
-        isActive: true,
+        ...restFilter,
         name: regex,
     })
         .select("name logo slug")
@@ -257,7 +443,7 @@ export const getSuggestions = async (req: Request, res: Response) => {
     // 2. Find matching items (from Restaurant menu AND Product collection)
     const [menuItemMatches, productMatches] = await Promise.all([
         Restaurant.aggregate([
-            { $match: { isActive: true } },
+            { $match: restFilter },
             { $unwind: "$menu" },
             { $match: { "menu.name": regex, "menu.isAvailable": true } },
             { $group: { _id: "$menu.name" } },
@@ -273,7 +459,7 @@ export const getSuggestions = async (req: Request, res: Response) => {
 
     // 3. Find matching categories
     const categoryMatches = await Restaurant.distinct("categories", {
-        isActive: true,
+        ...restFilter,
         categories: regex,
     });
 
@@ -396,7 +582,7 @@ export const createRestaurant = async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, message: "Restaurant onboarding limit reached. Maximum 1000 restaurants allowed." });
     }
 
-    const { name, description, address, phone, email, logo, coverImage, accountDetail, lat, lng, categories, upi } = req.body;
+    const { name, description, address, phone, email, logo, coverImage, accountDetail, lat, lng, categories, upi, cityId, zoneIds } = req.body;
 
     // Auto-generate slug if not provided, ensure uniqueness
     let slug: string = req.body.slug ? req.body.slug : slugify(name);
@@ -420,12 +606,21 @@ export const createRestaurant = async (req: Request, res: Response) => {
         for (let i = 0; i < 14; i++) restaurantId += Math.floor(Math.random() * 10).toString();
     }
 
+    const { resolvedCityId, resolvedZoneIds } = await resolveRestaurantGeo(
+        lng !== undefined ? Number(lng) : undefined,
+        lat !== undefined ? Number(lat) : undefined,
+        cityId,
+        zoneIds
+    );
+
     const restaurant = await Restaurant.create({
         name,
         slug,
         restaurantId,
         restaurantKey,
         storeType: req.body.storeType ?? "restaurant",
+        cityId: resolvedCityId,
+        zoneIds: resolvedZoneIds,
         description,
         address,
         location: { type: "Point", coordinates: [Number(lng), Number(lat)] },
@@ -450,7 +645,7 @@ export const updateRestaurant = async (req: Request, res: Response) => {
     if (!restaurant) throw new NotFoundException("Restaurant not found");
 
     const { name, slug, description, address, phone, email,
-        logo, coverImage, accountDetail, isActive, featured, lat, lng, categories, storeType, paymentQr, upi } = req.body;
+        logo, coverImage, accountDetail, isActive, featured, lat, lng, categories, storeType, paymentQr, upi, cityId, zoneIds } = req.body;
 
     if (slug && slug !== restaurant.slug) {
         const taken = await Restaurant.findOne({ slug });
@@ -461,6 +656,16 @@ export const updateRestaurant = async (req: Request, res: Response) => {
         lat !== undefined && lng !== undefined
             ? { type: "Point" as const, coordinates: [Number(lng), Number(lat)] as [number, number] }
             : restaurant.location;
+
+    const targetLng = lng !== undefined ? Number(lng) : restaurant.location?.coordinates?.[0];
+    const targetLat = lat !== undefined ? Number(lat) : restaurant.location?.coordinates?.[1];
+
+    const { resolvedCityId, resolvedZoneIds } = await resolveRestaurantGeo(
+        targetLng,
+        targetLat,
+        cityId || (restaurant.cityId?.toString()),
+        zoneIds || (restaurant.zoneIds?.map((z: any) => z.toString()))
+    );
 
     const updated = await Restaurant.findByIdAndUpdate(
         req.params.id,
@@ -480,6 +685,8 @@ export const updateRestaurant = async (req: Request, res: Response) => {
             ...(storeType !== undefined && { storeType }),
             ...(paymentQr !== undefined && { paymentQr }),
             ...(upi !== undefined && { upi }),
+            cityId: resolvedCityId,
+            zoneIds: resolvedZoneIds,
             location,
         },
         { new: true, runValidators: true }
@@ -539,7 +746,7 @@ const normalizeAndUploadImage = async (image: string | undefined, name: string):
 // ADMIN: POST /api/restaurants/admin/menu/add/:id
 // ─────────────────────────────────────────────────────────────────────────────
 export const addMenuItem = async (req: Request, res: Response) => {
-    const { name, description, price, b2bPrice, image, foodType, isAvailable, portion, portions } = req.body;
+    const { name, description, price, b2bPrice, image, foodType, isAvailable, portion, portions, category } = req.body;
 
     const restaurant = await Restaurant.findById(req.params.id);
     if (!restaurant) throw new NotFoundException("Restaurant not found");
@@ -551,26 +758,44 @@ export const addMenuItem = async (req: Request, res: Response) => {
         finalPortions = [
             {
                 name: portion || 'Full',
-                price: Number(price),
+                price: Number(price) || 0,
                 b2bPrice: b2bPrice !== undefined ? Number(b2bPrice) : 0,
                 isDefault: true,
             }
         ];
+    } else {
+        finalPortions = finalPortions.map((p: any) => ({
+            name: p.name || 'Full',
+            price: Number(p.price) || 0,
+            b2bPrice: Number(p.b2bPrice) || 0,
+            isDefault: !!p.isDefault
+        }));
     }
 
     const defaultPortion = finalPortions.find((p: any) => p.isDefault) || finalPortions[0];
+    const finalCategory = (category && typeof category === 'string' && category.trim().length > 0) ? category.trim() : "Main Course";
+    const normalizedFoodType = (foodType && typeof foodType === 'string')
+        ? (foodType.toLowerCase() === 'veg' || foodType.toLowerCase() === 'vegetarian' ? 'veg' : (foodType.toLowerCase() === 'vegan' ? 'vegan' : 'non-veg'))
+        : 'veg';
 
     restaurant.menu.push({
         name,
         description,
-        price: defaultPortion.price !== undefined ? Number(defaultPortion.price) : Number(price),
+        category: finalCategory,
+        price: defaultPortion.price !== undefined ? Number(defaultPortion.price) : (Number(price) || 0),
         b2bPrice: defaultPortion.b2bPrice !== undefined ? Number(defaultPortion.b2bPrice) : (b2bPrice !== undefined ? Number(b2bPrice) : 0),
         portion: portion || defaultPortion.name || 'Full',
         portions: finalPortions,
         image: finalImage,
-        foodType,
+        foodType: normalizedFoodType,
         isAvailable: isAvailable ?? true,
     });
+
+    if (!restaurant.categories) restaurant.categories = [];
+    if (finalCategory && !restaurant.categories.includes(finalCategory)) {
+        restaurant.categories.push(finalCategory);
+    }
+
     await restaurant.save();
 
     return res.status(201).json({ message: "Menu item added", menu: restaurant.menu });
@@ -595,6 +820,14 @@ export const updateMenuItem = async (req: Request, res: Response) => {
 
     if (req.body.name !== undefined) item.name = req.body.name;
     if (req.body.description !== undefined) item.description = req.body.description;
+    if (req.body.category !== undefined) {
+        const cat = (typeof req.body.category === 'string' && req.body.category.trim().length > 0) ? req.body.category.trim() : "Main Course";
+        item.category = cat;
+        if (!restaurant.categories) restaurant.categories = [];
+        if (cat && !restaurant.categories.includes(cat)) {
+            restaurant.categories.push(cat);
+        }
+    }
     if (req.body.price !== undefined) item.price = Number(req.body.price);
     if (req.body.b2bPrice !== undefined) (item as any).b2bPrice = Number(req.body.b2bPrice);
     if (req.body.image !== undefined) {
@@ -1016,24 +1249,40 @@ export const vendorAddMenuItem = async (req: Request, res: Response) => {
                     isDefault: true
                 }
             ];
+        } else {
+            finalPortions = finalPortions.map((p: any) => ({
+                name: p.name || "Full",
+                price: Number(p.price) || 0,
+                b2bPrice: Number(p.b2bPrice) || 0,
+                isDefault: !!p.isDefault
+            }));
         }
 
         const defaultPortion = finalPortions.find((p: any) => p.isDefault) || finalPortions[0];
+        const finalCategory = (req.body.category && typeof req.body.category === 'string' && req.body.category.trim().length > 0) ? req.body.category.trim() : "Main Course";
+        const normalizedFoodType = (foodType && typeof foodType === 'string')
+            ? (foodType.toLowerCase() === 'veg' || foodType.toLowerCase() === 'vegetarian' ? 'veg' : (foodType.toLowerCase() === 'vegan' ? 'vegan' : 'non-veg'))
+            : 'veg';
 
         const newItem = {
             name,
             description,
-            price: 0, // Admin sets this later
+            category: finalCategory,
+            price: defaultPortion.price !== undefined ? Number(defaultPortion.price) : 0,
             b2bPrice: defaultPortion.b2bPrice !== undefined ? Number(defaultPortion.b2bPrice) : parsedB2B,
             portion: req.body.portion || defaultPortion.name || "Full",
             portions: finalPortions,
             image: finalImage,
-            foodType,
+            foodType: normalizedFoodType as any,
             isAvailable: false, // Default not available until approved
             approvalStatus: "pending" as any
         };
 
-        restaurant.menu.push(newItem);
+        restaurant.menu.push(newItem as any);
+        if (!restaurant.categories) restaurant.categories = [];
+        if (finalCategory && !restaurant.categories.includes(finalCategory)) {
+            restaurant.categories.push(finalCategory);
+        }
         await restaurant.save();
 
         // Broadcast real-time notification to admin panel
@@ -1318,3 +1567,67 @@ export const vendorDeleteAccount = async (req: Request, res: Response) => {
         return res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT CATEGORIES: GET /api/restaurants/:id/categories
+// ─────────────────────────────────────────────────────────────────────────────
+export const getRestaurantCategories = async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    const query: any = Types.ObjectId.isValid(id) ? { _id: id } : { slug: id };
+    const restaurant = await Restaurant.findOne(query).select("categories menu");
+    if (!restaurant) throw new NotFoundException("Restaurant not found");
+
+    const menuCategories = restaurant.menu
+        .map((m) => m.category)
+        .filter((c): c is string => Boolean(c && c.trim()));
+    const allCategories = Array.from(
+        new Set([...(restaurant.categories || []), ...menuCategories])
+    ).filter(Boolean);
+
+    return res.json({ success: true, categories: allCategories });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT CATEGORIES: POST /api/restaurants/:id/categories
+// ─────────────────────────────────────────────────────────────────────────────
+export const addRestaurantCategory = async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    const { category } = req.body;
+    if (!category || typeof category !== "string" || !category.trim()) {
+        throw new BadRequestException("Category name is required");
+    }
+
+    const trimmedCat = category.trim();
+    const query: any = Types.ObjectId.isValid(id) ? { _id: id } : { slug: id };
+    const restaurant = await Restaurant.findOne(query);
+    if (!restaurant) throw new NotFoundException("Restaurant not found");
+
+    if (!restaurant.categories) restaurant.categories = [];
+    if (!restaurant.categories.includes(trimmedCat)) {
+        restaurant.categories.push(trimmedCat);
+        await restaurant.save();
+    }
+
+    return res.status(201).json({ success: true, message: "Category added", categories: restaurant.categories });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT CATEGORIES: DELETE /api/restaurants/:id/categories/:categoryName
+// ─────────────────────────────────────────────────────────────────────────────
+export const deleteRestaurantCategory = async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    const categoryName = String(req.params.categoryName);
+    const query: any = Types.ObjectId.isValid(id) ? { _id: id } : { slug: id };
+    const restaurant = await Restaurant.findOne(query);
+    if (!restaurant) throw new NotFoundException("Restaurant not found");
+
+    if (restaurant.categories) {
+        restaurant.categories = restaurant.categories.filter(
+            (c) => c.toLowerCase() !== decodeURIComponent(categoryName).toLowerCase()
+        );
+        await restaurant.save();
+    }
+
+    return res.json({ success: true, message: "Category removed", categories: restaurant.categories });
+};
+

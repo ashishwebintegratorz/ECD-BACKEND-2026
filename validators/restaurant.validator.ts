@@ -74,6 +74,7 @@ export const addMenuItemSchema = z.object({
     body: z.object({
         name: z.string().min(2, "Item name must be at least 2 characters"),
         description: z.string().optional(),
+        category: z.string().optional(),
         price: z.coerce.number().positive("Price must be a positive number"),
         b2bPrice: z.coerce.number().min(0).optional(),
         portion: z.string().optional(),
@@ -93,6 +94,7 @@ export const updateMenuItemSchema = z.object({
     body: z.object({
         name: z.string().min(2).optional(),
         description: z.string().optional(),
+        category: z.string().optional(),
         price: z.coerce.number().positive().optional(),
         b2bPrice: z.coerce.number().min(0).optional(),
         portion: z.string().optional(),

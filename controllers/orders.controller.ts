@@ -34,6 +34,7 @@ import Restaurant from "../models/Restaurant.model.js";
 import DriverLocation from "../models/DriverLocation.model.js";
 import DeliverySetting from "../models/DeliverySetting.model.js";
 import { sendPickupOtpSms, sendDeliveryOtpSms } from "../services/otp.service.js";
+import { validateCustomerLocationAndZone } from "../services/locationValidation.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: generate a 4-digit numeric OTP
@@ -63,11 +64,27 @@ const logCancellation = (
 // ─────────────────────────────────────────────────────────────────────────────
 export const createOrder = async (req: Request, res: Response) => {
   const userId = (req as any).user.id;
-  const { addressId, paymentMethod, restaurantId, couponCode, address: rawAddress, deliveryPhone, orderType, pickupTime } = req.body;
+  const {
+    addressId,
+    paymentMethod,
+    restaurantId,
+    couponCode,
+    address: rawAddress,
+    deliveryPhone,
+    orderType,
+    pickupTime,
+    cityId: bodyCityId,
+    zoneId: bodyZoneId,
+  } = req.body;
 
   // Require real restaurant ID
   if (!restaurantId) {
     return res.status(400).json({ message: "Restaurant ID is required" });
+  }
+
+  const store = await Restaurant.findById(restaurantId);
+  if (!store) {
+    return res.status(404).json({ message: "Restaurant not found" });
   }
 
   let addressDoc;
@@ -86,14 +103,54 @@ export const createOrder = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Address or Address ID is required for delivery" });
   }
 
+  let matchedCityId: any = undefined;
+  let matchedZoneId: any = undefined;
+  let customerLat = 0;
+  let customerLng = 0;
+
   if (orderType !== "pickup") {
     const { location } = addressDoc;
     if (!location?.coordinates || location.coordinates.length < 2)
       return res.status(400).json({ message: "Location coordinates are required" });
 
     const [lng, lat] = location.coordinates;
-    if (!isWithinIndore(lat, lng))
-      return res.status(400).json({ message: "Delivery is only available in Indore" });
+    customerLng = lng;
+    customerLat = lat;
+
+    // Central Location & Zone Validation
+    const targetCityId = bodyCityId || addressDoc.cityId || store.cityId?.toString();
+    if (targetCityId) {
+      const valResult = await validateCustomerLocationAndZone(String(targetCityId), lat, lng);
+      if (!valResult.isValid) {
+        return res.status(400).json({
+          success: false,
+          deliveryAvailable: false,
+          message: valResult.message || "Delivery is not available in your current location.",
+        });
+      }
+      matchedCityId = valResult.city?._id;
+      matchedZoneId = valResult.matchedZone?._id;
+
+      // Validate Restaurant City & Zone alignment
+      if (store.cityId && matchedCityId && store.cityId.toString() !== matchedCityId.toString()) {
+        return res.status(400).json({
+          success: false,
+          message: "The selected restaurant does not belong to your selected city.",
+        });
+      }
+
+      if (
+        store.zoneIds &&
+        store.zoneIds.length > 0 &&
+        matchedZoneId &&
+        !store.zoneIds.some((zid: any) => zid.toString() === matchedZoneId.toString())
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "The selected restaurant does not deliver to your zone.",
+        });
+      }
+    }
   }
 
   const cart = await Cart.findOne({ user: userId });
@@ -131,7 +188,6 @@ export const createOrder = async (req: Request, res: Response) => {
 
   // Will calculate dynamic delivery charge below
   // ── Fetch store to check type (Restaurant/Grocery) for GST ───────────────
-  const store = await Restaurant.findById(restaurantId);
   const isRestaurant = store?.storeType === "restaurant";
 
   // ── Coupon validation ─────────────────────────────────────────────────────
@@ -239,6 +295,9 @@ export const createOrder = async (req: Request, res: Response) => {
       orderNumber: `ORD-${Date.now()}`,
       customer: userId,
       store: restaurantId,   // generic store ref (restaurant or grocery)
+      cityId: matchedCityId || store.cityId || undefined,
+      zoneId: matchedZoneId || undefined,
+      deliveryCoordinates: orderType !== "pickup" ? { lat: customerLat, lng: customerLng } : undefined,
       items: orderItems,
       totalAmount,
       deliveryCharge,

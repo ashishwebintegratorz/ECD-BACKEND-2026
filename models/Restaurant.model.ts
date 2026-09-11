@@ -1,4 +1,4 @@
-import { Schema, model, Document } from "mongoose";
+import { Schema, model, Document, Types } from "mongoose";
 
 export type FoodType = "veg" | "non-veg" | "vegan";
 export type StoreType = "restaurant" | "grocery";
@@ -13,6 +13,7 @@ export interface IPortion {
 export interface IMenuItem {
     name: string;
     description?: string;
+    category?: string;             // e.g. "Pizza", "Burgers", "Starters", "Main Course"
     price: number;                 // Selling Price (visible to users)
     b2bPrice?: number;             // Business to Business Price (internal cost)
     portion?: string;              // Primary / default portion string e.g. "Full"
@@ -29,6 +30,8 @@ export interface IRestaurant extends Document {
     slug: string;
     restaurantId: string;          // 14-digit custom ID
     storeType: StoreType;          // "restaurant" | "grocery"
+    cityId?: Types.ObjectId;       // Ref to City
+    zoneIds?: Types.ObjectId[];    // Refs to DeliveryZone serving this restaurant
     description?: string;
     address: string;
     location: {
@@ -61,6 +64,7 @@ const MenuItemSchema = new Schema<IMenuItem>(
     {
         name: { type: String, required: true },
         description: { type: String },
+        category: { type: String, trim: true, default: "Main Course", index: true },
         price: { type: Number, required: true },
         b2bPrice: { type: Number, default: 0 },
         portion: { type: String, default: "Full" },
@@ -87,6 +91,8 @@ const RestaurantSchema = new Schema<IRestaurant>(
         slug: { type: String, required: true, unique: true, index: true },
         restaurantId: { type: String, required: true, unique: true, index: true },
         storeType: { type: String, enum: ["restaurant", "grocery"], default: "restaurant", index: true },
+        cityId: { type: Schema.Types.ObjectId, ref: "City", index: true },
+        zoneIds: [{ type: Schema.Types.ObjectId, ref: "DeliveryZone", index: true }],
         description: { type: String },
         address: { type: String, required: true },
         location: {
@@ -123,6 +129,8 @@ const RestaurantSchema = new Schema<IRestaurant>(
 );
 
 RestaurantSchema.index({ location: "2dsphere" });
+RestaurantSchema.index({ cityId: 1, isActive: 1 });
+RestaurantSchema.index({ zoneIds: 1, isActive: 1 });
 RestaurantSchema.index({ isActive: 1, storeType: 1, featured: -1, adminRating: -1, orderCount: -1 });
 
 export default model<IRestaurant>("Restaurant", RestaurantSchema);

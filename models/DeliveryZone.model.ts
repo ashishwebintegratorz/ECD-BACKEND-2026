@@ -13,15 +13,17 @@ export interface ISubArea {
 }
 
 export interface IDeliveryZone extends Document {
-  name: string; // e.g. "Haryana", "Gurgaon", "Bhubaneswar"
+  cityId?: Types.ObjectId; // Ref to City
+  name: string; // e.g. "Dewas Central", "Vijay Nagar", "Bhubaneswar North"
   center: {
     lat: number;
     lng: number;
   };
   radiusKm: number;
+  polygonCoordinates?: [number, number][]; // Optional Polygon coordinates [[lng, lat], ...]
   isActive: boolean;
   state?: string;
-  city?: string;
+  city?: string; // Legacy string city support
   subAreas?: ISubArea[];
   createdAt: Date;
   updatedAt: Date;
@@ -63,6 +65,11 @@ const SubAreaSchema = new Schema<ISubArea>(
 
 const DeliveryZoneSchema = new Schema<IDeliveryZone>(
   {
+    cityId: {
+      type: Schema.Types.ObjectId,
+      ref: "City",
+      index: true,
+    },
     name: {
       type: String,
       required: false,
@@ -90,6 +97,10 @@ const DeliveryZoneSchema = new Schema<IDeliveryZone>(
       required: true,
       default: 15,
     },
+    polygonCoordinates: {
+      type: [[Number]],
+      default: undefined,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -105,6 +116,7 @@ const DeliveryZoneSchema = new Schema<IDeliveryZone>(
   }
 );
 
+DeliveryZoneSchema.index({ cityId: 1, isActive: 1 });
 DeliveryZoneSchema.index({ name: 1, isActive: 1 });
 
 const DeliveryZone =
